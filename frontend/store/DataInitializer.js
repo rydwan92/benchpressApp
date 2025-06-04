@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { useCompetitionStore } from './useCompetitionStore'; // Importuj store
+import useCompetitionStore from '../store/useCompetitionStore'; // ZMIANA: Importuj jako domyślny
 import { loadAppData } from '../utils/api';
 import { io } from 'socket.io-client';
 import { CONFIG } from '../config';

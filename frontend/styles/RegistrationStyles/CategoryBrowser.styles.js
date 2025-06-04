@@ -4,28 +4,31 @@ import { colors, font, spacing, borderRadius, shadows, componentStyles } from '.
 export default StyleSheet.create({
   browserContainer: {
     flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
     padding: spacing.md,
-    margin: spacing.md,
-    ...shadows.medium,
+    backgroundColor: colors.surface, // Added for background consistency
+    borderRadius: borderRadius.lg, // Dodane zaokrąglenie krawędzi
+    overflow: 'hidden', // Dodane, aby przyciąć zawartość do zaokrąglonych krawędzi
   },
   browserTitle: {
-    ...componentStyles.componentTitle,
+    fontSize: font.sizes.xl,
+    fontWeight: font.weights.bold,
+    color: colors.text, // Consistent with CWM componentTitle
+    marginTop: spacing.lg, // Adjusted marginTop
+    marginBottom: spacing.lg,
+    textAlign: 'center',
   },
-
   selectionRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    justifyContent: 'space-between',
     marginBottom: spacing.lg,
+    gap: spacing.md,
   },
   selectionColumn: {
     flex: 1,
-    flexDirection: 'column',
+    justifyContent: 'center',
   },
   selectionLabel: {
     fontSize: font.sizes.sm,
-    fontWeight: font.weights.medium,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
     marginLeft: spacing.xs,
@@ -33,163 +36,156 @@ export default StyleSheet.create({
   selectButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.md,
+    backgroundColor: colors.accent, // ZMIANA: Tło na pomarańczowe (accent)
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'space-between',
-    transition: 'border-color 0.2s ease-in-out',
-  },
-  selectButtonHover: {
-    borderColor: colors.primary,
+    borderColor: colors.accent, // ZMIANA: Ramka również pomarańczowa dla spójności
+    ...shadows.xs,
   },
   selectButtonDisabled: {
-    backgroundColor: colors.disabledBackground,
-    borderColor: colors.disabledBorder,
+    backgroundColor: colors.surfaceVariant, 
+    borderColor: colors.borderLight,
+    opacity: 0.7, // Dodatkowe przygaszenie dla nieaktywnego przycisku
   },
   selectIcon: {
     marginRight: spacing.sm,
+    color: colors.textLight, // ZMIANA: Ikona na białą, aby kontrastowała z pomarańczowym tłem
   },
   selectButtonText: {
     flex: 1,
-    fontSize: font.sizes.sm,
-    fontWeight: font.weights.medium,
-    color: colors.text,
-    textAlign: 'left',
+    fontSize: font.sizes.sm, // Rozmiar fontu jak w buttonach
+    color: colors.textLight, // ZMIANA: Tekst na biały (textLight) dla kontrastu z pomarańczowym tłem
+    fontWeight: font.weights.semibold, // ZMIANA: Pogrubienie jak w buttonach
   },
   selectButtonTextDisabled: {
-    color: colors.textSecondary,
+    color: colors.textSecondary, // Tekst dla nieaktywnego przycisku pozostaje szary
   },
-
-  // --- Style Listy Zawodników ---
   athleteListContainer: {
     flex: 1,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius.md,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl,
+    opacity: 0.7,
+  },
+  emptyText: {
+    fontSize: font.sizes.md,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  emptySubText: {
+    fontSize: font.sizes.sm,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
   athleteListItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: colors.surface,
-    transition: 'background-color 0.15s ease-in-out',
+    alignItems: 'center',
+    backgroundColor: colors.card, // Consistent card background
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.md,
+    ...shadows.small,
   },
   athleteListItemHover: {
-    backgroundColor: colors.background,
+    ...shadows.medium,
+    borderColor: colors.primary, // Example hover border
+    borderWidth: 1,
   },
   athleteInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginRight: spacing.sm,
+    flex: 1, // Allow text to take space
+    marginRight: spacing.sm, // Space before right container
   },
   avatarCircle: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary + '30', // Lighter primary
     justifyContent: 'center',
+    alignItems: 'center',
     marginRight: spacing.md,
   },
   avatarText: {
-    color: colors.textLight,
+    fontSize: font.sizes.sm,
     fontWeight: font.weights.bold,
-    fontSize: font.sizes.md,
+    color: colors.primary,
   },
   athleteTextDetails: {
-    flex: 1,
-    justifyContent: 'center',
+    flex: 1, // Allow text to shrink/grow
   },
   athleteNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs / 2,
   },
   athleteName: {
     fontSize: font.sizes.md,
     fontWeight: font.weights.semibold,
-    color: colors.text,
-    marginRight: spacing.sm,
-    flexShrink: 1,
+    color: colors.text, // Main text color
+    flexShrink: 1, // Allow name to shrink if too long
   },
   athleteDetailText: {
-    fontSize: font.sizes.sm,
+    fontSize: font.sizes.xs,
     color: colors.textSecondary,
+    marginTop: spacing.xxs,
   },
   athleteRightContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  athleteApproachesContainer: {
+  // --- Styles for big approach badges ---
+  bigApproachContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginRight: spacing.md,
-    minWidth: 60,
+    justifyContent: 'center',
+    marginRight: spacing.md, // Space before action buttons
   },
-  approachText: {
-    fontSize: font.sizes.sm,
+  bigApproachBadge: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceVariant, // Neutral background
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm, // Adjusted padding
+    paddingVertical: spacing.xs,  // Adjusted padding
+    marginHorizontal: spacing.xxs,
+    minWidth: 40, // Ensure some width
+  },
+  bigApproachBadgeLabel: {
+    fontSize: font.sizes.xs,
+    color: colors.textSecondary,
     fontWeight: font.weights.medium,
-    color: colors.textSecondary,
-    marginHorizontal: spacing.xs / 2,
   },
-  approachSeparator: {
+  bigApproachBadgeText: {
     fontSize: font.sizes.sm,
-    color: colors.border,
-    marginHorizontal: spacing.xs / 2,
+    color: colors.primary, // Primary color for weight
+    fontWeight: font.weights.bold,
   },
-  approachPlaceholder: {
-    fontSize: font.sizes.sm,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
-    minWidth: 60,
-    textAlign: 'right',
-  },
+  // --- End of big approach badges ---
   athleteActionsContainer: {
     flexDirection: 'row',
-    gap: spacing.md,
+    alignItems: 'center',
   },
   actionButton: {
     padding: spacing.sm,
+    marginLeft: spacing.xs,
     borderRadius: borderRadius.full,
   },
   actionButtonHover: {
-    backgroundColor: colors.background,
-    transform: [{ scale: 1.1 }],
+    backgroundColor: colors.surfaceVariant, // Subtle hover for action buttons
   },
   editButton: {},
   deleteButton: {},
 
-  // --- Style Pustego Stanu ---
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-    minHeight: 200,
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.md,
-    fontSize: font.sizes.md,
-    fontWeight: font.weights.medium,
-  },
-  emptySubText: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    marginTop: spacing.xs,
-    fontSize: font.sizes.sm,
-  },
-
-  // --- Style Modali (Ujednolicone) ---
+  // Modal Styles (consistent with CategoryWeightManager)
   modalBg: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
@@ -212,144 +208,144 @@ export default StyleSheet.create({
   modalTitle: {
     fontSize: font.sizes.xl,
     fontWeight: font.weights.bold,
-    color: colors.text,
+    color: colors.text, // Consistent modal title color
     textAlign: 'center',
-    marginBottom: spacing.xs,
+    marginBottom: spacing.md,
   },
   modalSubtitle: {
-    fontSize: font.sizes.md,
+    fontSize: font.sizes.sm,
     color: colors.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
-  modalLabel: {
-    fontSize: font.sizes.sm,
-    fontWeight: font.weights.medium,
-    color: colors.textSecondary,
-    marginBottom: spacing.xs,
-    alignSelf: 'flex-start',
-    width: '100%',
-  },
-  selectLabel: {
+  selectLabel: { // For labels inside modals
     fontSize: font.sizes.sm,
     color: colors.textSecondary,
     marginBottom: spacing.sm,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start', // Align to left
   },
   selectItemsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    width: '100%',
-    marginTop: spacing.sm,
+    width: '100%', // Ensure it takes full width in scrollview
   },
-  selectItem: {
+  selectItem: { // Style for category/weight pills in modal
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.background,
-    transition: 'border-color 0.2s ease-in-out, background-color 0.2s ease-in-out, transform 0.1s ease',
+    backgroundColor: colors.background, // Consistent with CWM
+    transition: 'border-color 0.2s ease-in-out, background-color 0.2s ease-in-out, transform 0.15s ease', // Zaktualizowano transition
   },
   selectItemHover: {
-    borderColor: colors.accent,
+    borderColor: colors.primary, // ZMIANA: Ramka na niebieską
+    backgroundColor: colors.primary, // ZMIANA: Tło na niebieskie
+    transform: [{ scale: 1.05 }], // ZMIANA: Lekkie powiększenie
   },
-  selectItemActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+  selectItemActive: { // Styl dla aktywnie wybranego elementu
+    backgroundColor: colors.primary, // ZMIANA: Tło na niebieskie
+    borderColor: colors.primary,   // ZMIANA: Ramka na niebieską
   },
   selectItemText: {
-    color: colors.text,
+    color: colors.text, // Consistent with CWM
     fontSize: font.sizes.sm,
   },
-  selectItemTextActive: {
-    color: colors.textLight,
+  selectItemTextActive: { // Styl dla tekstu w aktywnie wybranym lub najechanym elemencie
+    color: colors.textLight, // Biały tekst
     fontWeight: font.weights.medium,
   },
-  errorText: {
+  errorText: { // For "Brak zdefiniowanych..."
     color: colors.error,
     fontSize: font.sizes.sm,
     textAlign: 'center',
     width: '100%',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  modalBtns: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: spacing.lg,
+    width: '100%',
+  },
+  modalBtnBase: { // Base for modal action buttons
+    ...componentStyles.button.base,
+    flex: 1,
+    marginHorizontal: spacing.sm,
+    maxWidth: 180,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelBtn: {
+    backgroundColor: colors.textSecondary, // Consistent with CWM
+  },
+  modalCancelBtnText: {
+    ...componentStyles.button.text,
+    color: colors.textLight, // Text on dark button
+  },
+  modalDeleteBtn: {
+    backgroundColor: colors.error, // Consistent with CWM
+  },
+  modalConfirmBtn: { // For "Zapisz" in edit modal
+    backgroundColor: colors.accent, // Consistent with CWM
+  },
+  modalBtnText: { // For "Tak, usuń" and "Zapisz"
+    ...componentStyles.button.text,
+    color: colors.textLight,
+  },
+  modalBtnIcon: {
+    marginRight: spacing.xs,
   },
 
+  // Edit Modal Specifics
   modalInput: {
     ...componentStyles.input,
     width: '100%',
     marginBottom: spacing.md,
   },
-  modalRadioContainer: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
+  modalLabel: { // Labels for TextInput fields in Edit Modal
+    fontSize: font.sizes.sm,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
     alignSelf: 'flex-start',
   },
+  modalRadioContainer: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
   modalRadioBtn: {
+    flex: 1,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.surface,
-    transition: 'background-color 0.15s ease, border-color 0.15s ease',
+    alignItems: 'center',
+    backgroundColor: colors.background,
   },
   modalRadioBtnActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   modalRadioText: {
+    fontSize: font.sizes.sm,
     color: colors.text,
-    fontWeight: font.weights.medium,
   },
   modalRadioTextActive: {
     color: colors.textLight,
-  },
-  modalBtns: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: spacing.lg,
-    width: '100%',
-    gap: spacing.sm,
-  },
-  modalBtnBase: {
-    ...componentStyles.button.base,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    minWidth: 100,
-    justifyContent: 'center',
-    transition: 'background-color 0.15s ease, border-color 0.15s ease',
-  },
-  modalConfirmBtn: {
-    backgroundColor: colors.primary,
-  },
-  modalDeleteBtn: {
-    backgroundColor: colors.error,
-  },
-  modalCancelBtn: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-  },
-  modalBtnText: {
-    ...componentStyles.button.text,
-    color: colors.textLight,
-  },
-  modalCancelBtnText: {
-    ...componentStyles.button.text,
-    color: colors.textSecondary,
-  },
-  modalBtnIcon: {
-    marginRight: spacing.sm,
+    fontWeight: font.weights.medium,
   },
 
-  // --- Style Powiadomień (Ujednolicone) ---
+  // Notification Styles (assuming they are globally consistent)
   notification: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
+    position: 'absolute',
+    bottom: Platform.OS === 'web' ? spacing.lg : 80,
+    left: spacing.md,
+    right: spacing.md,
     ...componentStyles.notification.base,
     flexDirection: 'row',
     alignItems: 'center',
@@ -370,33 +366,35 @@ export default StyleSheet.create({
     flex: 1,
     textAlign: 'left',
   },
-
-  // --- Nowe style dla dużych pigułek z podejściami (używane zamiast starych) ---
-  bigApproachContainer: {
+  statusButtonsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.md,
+    marginLeft: spacing.sm,
   },
-  bigApproachBadge: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary + '30',
+  statusButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
     borderRadius: borderRadius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
     marginHorizontal: spacing.xs,
+    backgroundColor: colors.surface,
   },
-  bigApproachBadgeLabel: {
-    fontSize: font.sizes.md,
-    fontWeight: font.weights.bold,
-    color: colors.primary,
-    marginBottom: spacing.xs / 2,
+  statusButtonActivePass: {
+    backgroundColor: colors.successMuted,
+    borderColor: colors.success,
   },
-  bigApproachBadgeText: {
-    fontSize: font.sizes.lg,
+  statusButtonActiveFail: {
+    backgroundColor: colors.errorMuted,
+    borderColor: colors.error,
+  },
+  statusButtonText: {
+    fontSize: font.sizes.xs,
     fontWeight: font.weights.bold,
-    color: colors.primary,
+    color: colors.text,
+  },
+  statusButtonClear: {
+    padding: spacing.xs,
+    marginLeft: spacing.xs,
   },
 });

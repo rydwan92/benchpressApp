@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Platform, StyleSheet } from 'react-native';
 // Usunięto nieużywane importy FileSystem i Sharing
-import { useCompetitionStore } from '../../store/useCompetitionStore';
+import  useCompetitionStore  from '../../store/useCompetitionStore';
 import { loadAppData, saveAppData } from '../../utils/api';
 import { colors, font, spacing, borderRadius, shadows, componentStyles } from '../../theme/theme'; // Importuj theme
 import { AntDesign } from '@expo/vector-icons'; // Importuj ikony
@@ -52,7 +52,7 @@ export default function CompetitionSummary({ onEditInfoRequest, isInfoFormVisibl
   return (
     <View style={styles.summaryBox}>
       {/* --- POCZĄTEK ZMIANY: Zmiana treści i stylu tytułu --- */}
-      <Text style={styles.headerText}>Top 10 wyników!</Text>
+      <Text style={styles.headerText}>10 najlepszych wyników</Text>
       {/* --- KONIEC ZMIANY --- */}
 
       {/* --- POCZĄTEK ZMIANY: Kontener przycisków --- */}

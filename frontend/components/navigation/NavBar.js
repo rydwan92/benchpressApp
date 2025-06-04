@@ -10,11 +10,12 @@ export default function NavBar({ navigation }) {
 
   // Lista przycisków nawigacyjnych z poprawnymi nazwami tras
   const navButtons = [
-    { title: 'Rejestracja zawodników', route: 'Registration' },
-    { title: 'Prowadzenie zawodów', route: 'Competition' },
-    { title: 'Widok Zawodów', route: 'AthleteView' },
+    { title: 'Panel zarządzania', route: 'Registration' },
+    { title: 'Panel sterowania ekranem', route: 'Competition' },
+    { title: 'Ekran widownia', route: 'AthleteView' },
+    { title: 'Ekran pomost', route: 'Report' },
     { title: 'Wyniki', route: 'Results' },
-    { title: 'Pomoc pomost', route: 'Help' },
+ // POPRAWIONA NAZWA TRASY
   ];
 
   return (

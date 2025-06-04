@@ -1,436 +1,522 @@
-import React, { useEffect, useState, useRef, useCallback, useLayoutEffect, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { View, Text, Image, ScrollView, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCompetitionStore } from '../store/useCompetitionStore';
-import NavBar from '../components/navigation/NavBar';
-import Footer from '../components/navigation/Footer';
-import { colors, font, spacing, borderRadius, shadows } from '../theme/theme';
-import { AntDesign } from '@expo/vector-icons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// --- START ZMIANY: Dodaj definicję hasAthleteCompleted ---
-// Funkcja pomocnicza do sprawdzania ukończenia zawodnika
-const hasAthleteCompleted = (athlete) => {
-  // Sprawdza, czy wszystkie trzy statusy podejść są ustawione (nie są null)
+import useCompetitionStore from '../store/useCompetitionStore.js';
+import AttemptDisplay from '../components/athleteView/AttemptDisplay';
+import FinalAthleteViewTimerDisplay from '../components/athleteView/AthleteViewTimerDisplay';
+import NextAthleteUp from '../components/athleteView/NextAthleteUp';
+import PodiumDisplay from '../components/athleteView/PodiumDisplay';
+import GroupAthleteList from '../components/athleteView/GroupAthleteList';
+import AttemptResultAnimation from '../components/competition/AttemptResultAnimation.js';
+import TemporaryResultsViewer from '../components/athleteView/TemporaryResultsViewer';
+import IndividualResultsTable from '../components/results/IndividualResultsTable';
+import { processAthletesForResults, sortIndividualResults } from '../components/results/resultsHelper';
+import { colors, font, spacing, borderRadius, shadows } from '../theme/theme.js';
+
+// DODANE: Importuj nowe logotypy
+import startStrzegomLogo from '../assets/images/logo_start_resized.png';
+import relaxKamiennaGoraLogo from '../assets/images/logo_kamienna_resized.png';
+
+// Helper functions (ensure they are defined or imported)
+const getAthleteDeclaredWeightForRound = (athlete, round) => {
+    if (!athlete) return 0;
+    const weightStr = athlete[`podejscie${round}`];
+    return parseFloat(String(weightStr).replace(',', '.')) || 0;
+};
+const hasAthleteCompletedAll = (athlete) => {
+  if (!athlete) return false;
   return !!(athlete.podejscie1Status && athlete.podejscie2Status && athlete.podejscie3Status);
 };
-// --- KONIEC ZMIANY ---
 
-// --- Komponenty pomocnicze (AttemptDisplay, TimerDisplay, GroupAthleteList) ---
-// Komponent pomocniczy do wyświetlania pojedynczego podejścia (bez zmian)
-const AttemptDisplay = ({ number, weight, status, isActive }) => {
-    const getStatusIcon = (status) => {
-        if (status === 'passed') return <AntDesign name="checkcircle" size={32} color={colors.success} />;
-        if (status === 'failed') return <AntDesign name="closecircle" size={32} color={colors.error} />;
-        return <AntDesign name="clockcircleo" size={32} color={colors.textSecondary} />; // Oczekujące lub brak
-    };
-
-    return (
-        <View style={[styles.attemptBox, isActive && styles.attemptBoxActive]}>
-            <Text style={styles.attemptNumber}>Podejście {number}</Text>
-            <Text style={styles.attemptWeight}>{weight ? `${weight} kg` : '-'}</Text>
-            <View style={styles.attemptStatus}>
-                {getStatusIcon(status)}
-            </View>
-        </View>
-    );
-};
-
-// Komponent Timera - bez zmian w logice formatowania
-const TimerDisplay = ({ isActive, timeLeft }) => {
-    const formatTime = (seconds) => {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-    };
-
-    return (
-        <View style={styles.timerContainer}>
-            <Text style={[
-                styles.timerText,
-                isActive && timeLeft <= 10 && timeLeft > 0 && styles.timerWarning, // Ostrzeżenie tylko gdy aktywny
-                isActive && timeLeft === 0 && styles.timerFinished // Zakończony tylko gdy aktywny (choć stan active powinien być false)
-            ]}>
-                {isActive ? formatTime(timeLeft) : '--:--'} {/* Pokaż --:-- gdy nieaktywny */}
-            </Text>
-        </View>
-    );
-};
-
-// --- POCZĄTEK ZMIANY: Komponent listy zawodników dla widoku grupy ---
-const GroupAthleteList = ({ athletes, currentAthleteOriginalIndex }) => {
-    if (!athletes || athletes.length === 0) {
-        return <Text style={styles.placeholderText}>Brak zawodników w tej grupie.</Text>;
-    }
-
-    const getStatusIcon = (status) => {
-        if (status === 'passed') return <AntDesign name="checkcircleo" size={16} color={colors.success} />;
-        if (status === 'failed') return <AntDesign name="closecircleo" size={16} color={colors.error} />;
-        return null; // Nie pokazuj ikony dla null/oczekujących w tym widoku
-    };
-
-    return (
-        <ScrollView style={styles.groupListScroll}>
-            {athletes.map((athlete, index) => (
-                <View
-                    key={athlete.originalIndex}
-                    style={[
-                        styles.groupListItem,
-                        athlete.isCompleted && styles.groupListItemCompleted,
-                        // Dodaj styl podświetlenia, jeśli indeks się zgadza
-                        athlete.originalIndex === currentAthleteOriginalIndex && styles.groupListItemActive
-                    ]}
-                >
-                    <View style={styles.groupListRank}>
-                       <Text style={styles.groupListRankText}>{index + 1}.</Text>
-                    </View>
-                    <View style={styles.groupListInfo}>
-                        <Text style={styles.groupListName}>{athlete.imie} {athlete.nazwisko}</Text>
-                        <Text style={styles.groupListClub}>{athlete.klub || 'Brak klubu'}</Text>
-                    </View>
-                    <View style={styles.groupListAttempts}>
-                        {[1, 2, 3].map(nr => (
-                            <View key={nr} style={styles.groupListAttempt}>
-                                <Text style={styles.groupListAttemptWeight}>{athlete[`podejscie${nr}`] || '-'}</Text>
-                                {getStatusIcon(athlete[`podejscie${nr}Status`])}
-                            </View>
-                        ))}
-                    </View>
-                     {athlete.isCompleted && <AntDesign name="check" size={18} color={colors.success} style={styles.groupListCompletedIcon} />}
-                </View>
-            ))}
-        </ScrollView>
-    );
-};
-// --- KONIEC ZMIANY ---
+const ANIMATION_DURATION = 2000;
+const TEMP_RESULTS_DISPLAY_DURATION = 5000;
 
 
 export default function AthleteViewScreen() {
-    // Pobieranie stanu ze store'u
     const {
-        zawody, zawodnicy, activeCategory, activeWeight,
-        activeAthleteOriginalIndex, activeAttemptNr, timerActive, timerTimeLeft,
-        // --- START ZMIANY: Pobierz socket i akcje timera ---
-        socket, setTimerActive, setTimerTimeLeft
-        // --- KONIEC ZMIANY ---
+        zawodnicy,
+        activeCategory,
+        activeWeight,
+        socket,
+        activeAthleteOriginalIndex,
+        activeAttemptNr,
+        timerActive,
+        timerTimeLeft,
+        zawody,
+        attemptResultForAnimation,
+        setAttemptResultForAnimation,
+        clearAttemptResultForAnimation,
     } = useCompetitionStore(state => ({
-        zawody: state.zawody,
         zawodnicy: state.zawodnicy,
         activeCategory: state.activeCategory,
         activeWeight: state.activeWeight,
+        socket: state.socket,
         activeAthleteOriginalIndex: state.activeAthleteOriginalIndex,
         activeAttemptNr: state.activeAttemptNr,
         timerActive: state.timerActive,
         timerTimeLeft: state.timerTimeLeft,
-        // --- START ZMIANY: Pobierz socket i akcje ---
-        socket: state.socket,
-        setTimerActive: state.setTimerActive,
-        setTimerTimeLeft: state.setTimerTimeLeft,
-        // --- KONIEC ZMIANY ---
+        zawody: state.zawody,
+        attemptResultForAnimation: state.attemptResultForAnimation,
+        setAttemptResultForAnimation: state.setAttemptResultForAnimation,
+        clearAttemptResultForAnimation: state.clearAttemptResultForAnimation,
     }));
 
-    const renderStartTime = useRef(null); // Ref do przechowywania czasu startu renderowania
+    const [showManuallyRequestedResultsForGroup, setShowManuallyRequestedResultsForGroup] = useState(null);
+    const [showAnimation, setShowAnimation] = useState(false);
+    const [animationSuccess, setAnimationSuccess] = useState(false);
+    const animationTimeoutRef = useRef(null);
+    const [temporaryResultsInfo, setTemporaryResultsInfo] = useState(null);
+    const tempResultsTimeoutRef = useRef(null);
 
-    // Zmierz czas od zmiany stanu do początku renderowania
-    useLayoutEffect(() => {
-        renderStartTime.current = performance.now();
-        console.log('[AthleteViewScreen] Start Render');
-    }); // Uruchamia się przed renderowaniem
-
-    // Zmierz czas trwania renderowania
     useEffect(() => {
-        if (renderStartTime.current) {
-            const renderEndTime = performance.now();
-            console.log(`[AthleteViewScreen] Render Duration: ${renderEndTime - renderStartTime.current} ms`);
-            renderStartTime.current = null; // Zresetuj na następny render
+        if (socket) {
+            const handleAttemptAnimationEvent = (data) => {
+                if (data && data.athleteOriginalIndex) {
+                    setAttemptResultForAnimation(data);
+                }
+            };
+            const handleDisplayCategoryResults = (data) => {
+                if (data && data.category && data.weightClass) {
+                    setShowManuallyRequestedResultsForGroup({ category: data.category, weight: data.weightClass });
+                    setTemporaryResultsInfo(null); 
+                    setShowAnimation(false); 
+                    if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
+                    if (tempResultsTimeoutRef.current) clearTimeout(tempResultsTimeoutRef.current);
+                }
+            };
+
+            socket.on('attemptAnimationTriggered', handleAttemptAnimationEvent);
+            socket.on('displayCategoryResults', handleDisplayCategoryResults);
+            return () => {
+                socket.off('attemptAnimationTriggered', handleAttemptAnimationEvent);
+                socket.off('displayCategoryResults', handleDisplayCategoryResults);
+            };
         }
-    }); // Uruchamia się po renderowaniu
+    }, [socket, setAttemptResultForAnimation]);
 
-    // Logowanie (bez zmian)
     useEffect(() => {
-        console.log('[AthleteViewScreen] Store State Update:');
-        console.log('  - activeCategory:', activeCategory);
-        console.log('  - activeWeight:', activeWeight);
-        console.log('  - activeAthleteOriginalIndex:', activeAthleteOriginalIndex);
-        console.log('  - zawodnicy count:', zawodnicy?.length);
-    }, [activeCategory, activeWeight, activeAthleteOriginalIndex, zawodnicy]);
+        if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
+        const animationIsForCurrentContext = attemptResultForAnimation &&
+            (attemptResultForAnimation.athleteOriginalIndex === activeAthleteOriginalIndex || activeAthleteOriginalIndex === null);
 
-    // Znajdź aktualnego zawodnika (bez zmian)
+        if (animationIsForCurrentContext) {
+            setAnimationSuccess(attemptResultForAnimation.success);
+            setShowAnimation(true);
+            setTemporaryResultsInfo(null);
+            setShowManuallyRequestedResultsForGroup(null); // Ukryj wyniki manualne, jeśli animacja jest dla aktywnego zawodnika
+            const { category, weightClass } = attemptResultForAnimation;
+            animationTimeoutRef.current = setTimeout(() => {
+                setShowAnimation(false);
+                clearAttemptResultForAnimation();
+                if (category && weightClass) {
+                    setTemporaryResultsInfo({ category, weightClass });
+                }
+            }, ANIMATION_DURATION);
+        } else if (!attemptResultForAnimation && showAnimation) {
+            setShowAnimation(false);
+        }
+        return () => {
+            if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
+        };
+    }, [attemptResultForAnimation, clearAttemptResultForAnimation, activeAthleteOriginalIndex]);
+
+    // ZMODYFIKOWANY useEffect do obsługi przełączania widoku
+    useEffect(() => {
+        // Jeśli wyniki manualne są aktualnie wyświetlane,
+        // a sędzia wybrał aktywnego zawodnika (activeAthleteOriginalIndex nie jest null),
+        // ukryj wyniki manualne, aby pokazać widok aktywnego zawodnika.
+        if (showManuallyRequestedResultsForGroup && activeAthleteOriginalIndex !== null) {
+            setShowManuallyRequestedResultsForGroup(null);
+        }
+    }, [activeAthleteOriginalIndex, showManuallyRequestedResultsForGroup]);
+
     const currentAthlete = useMemo(() => {
-        if (activeAthleteOriginalIndex === null || !zawodnicy || zawodnicy.length === 0) {
-            console.log('[AthleteViewScreen] Calculating currentAthlete: null (index or zawodnicy missing)');
-            return null;
-        }
-        const athlete = zawodnicy[activeAthleteOriginalIndex];
-        if (!athlete) {
-             console.log(`[AthleteViewScreen] Calculating currentAthlete: null (athlete not found at index ${activeAthleteOriginalIndex})`);
-        } else {
-             console.log(`[AthleteViewScreen] Calculating currentAthlete: Found ${athlete.imie} ${athlete.nazwisko}`);
-        }
-        return athlete;
+        if (activeAthleteOriginalIndex === null || !zawodnicy || zawodnicy.length === 0) return null;
+        return zawodnicy.find(z => z.originalIndex === activeAthleteOriginalIndex);
     }, [zawodnicy, activeAthleteOriginalIndex]);
 
-    // --- POCZĄTEK ZMIANY: Filtruj zawodników dla widoku grupy ---
     const groupAthletes = useMemo(() => {
         if (!activeCategory || !activeWeight || !zawodnicy) return [];
         return zawodnicy
-            .map((z, index) => ({
-                ...z,
-                originalIndex: index,
-                isCompleted: hasAthleteCompleted(z)
-            }))
-            .filter(z => z.kategoria === activeCategory && z.waga === activeWeight)
+            .filter(z => z.kategoria === activeCategory && String(z.waga) === String(activeWeight))
+            .map(z => ({...z, isCompleted: hasAthleteCompletedAll(z) }))
             .sort((a, b) => {
-                // Sortuj wg. ukończenia (nieukończeni pierwsi), potem wg. podejścia 1
-                const weightA = Number(a.podejscie1) || 0;
-                const weightB = Number(b.podejscie1) || 0;
+                // Sort by completion status first (not completed first)
                 if (a.isCompleted !== b.isCompleted) {
                     return a.isCompleted ? 1 : -1;
                 }
-                return weightA - weightB; // Lub inne kryterium sortowania listy grupy
+                // Then by declared weight for the current round (lower first)
+                const weightA = parseFloat(String(a.podejscie1).replace(',', '.')) || Infinity; // Assuming round 1 for general sorting, adjust if needed
+                const weightB = parseFloat(String(b.podejscie1).replace(',', '.')) || Infinity;
+                if (weightA !== weightB) {
+                    return weightA - weightB;
+                }
+                // Finally by starting number (lower first)
+                const indexA = parseInt(String(a.nrStartowy || a.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+                const indexB = parseInt(String(b.nrStartowy || b.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+                return indexA - indexB;
             });
     }, [zawodnicy, activeCategory, activeWeight]);
-    // --- KONIEC ZMIANY ---
 
+    const nextAthleteData = useMemo(() => {
+        if (!currentAthlete || !activeCategory || !activeWeight || !zawodnicy || zawodnicy.length === 0) return null;
 
-    // --- START ZMIANY: Logika lokalnego timera dla AthleteViewScreen ---
-    const localTimerIntervalRef = useRef(null);
-    const stableSetTimerTimeLeft = useCallback(setTimerTimeLeft, [setTimerTimeLeft]); // Stabilna referencja
+        const currentGlobalRound = activeAttemptNr; // Use activeAttemptNr as the current round context
+        const athletesInCurrentGroup = zawodnicy.filter(z => z.kategoria === activeCategory && String(z.waga) === String(activeWeight));
 
-    const stopLocalTimer = useCallback(() => {
-        if (localTimerIntervalRef.current) {
-            console.log('[AthleteViewScreen] Stopping local timer interval.');
-            clearInterval(localTimerIntervalRef.current);
-            localTimerIntervalRef.current = null;
-        }
-    }, []); // Pusta tablica zależności, bo używa tylko refa
+        if (athletesInCurrentGroup.length === 0) return null;
 
-    const startLocalTimer = useCallback(() => {
-        stopLocalTimer(); // Zatrzymaj poprzedni interwał na wszelki wypadek
-        console.log('[AthleteViewScreen] Starting local timer interval...');
-        localTimerIntervalRef.current = setInterval(() => {
-            stableSetTimerTimeLeft(prevTime => {
-                // console.log(`[AthleteViewScreen Local Tick] prevTime: ${prevTime}`); // Opcjonalny log
-                if (prevTime <= 1) {
-                    stopLocalTimer(); // Zatrzymaj interwał
-                    // Nie musimy tu ustawiać timerActive na false, bo zrobi to event 'timerStopped'
-                    return 0;
+        // Filter for athletes who are:
+        // 1. Not the current athlete
+        // 2. Have NOT completed their attempt in the current round
+        const upcomingAthletesForRound = athletesInCurrentGroup
+            .filter(athlete => {
+                const isNotCurrent = athlete.originalIndex !== currentAthlete.originalIndex;
+                const attemptStatus = athlete[`podejscie${currentGlobalRound}Status`];
+                const hasNotCompletedAttempt = attemptStatus === null || attemptStatus === undefined;
+                return isNotCurrent && hasNotCompletedAttempt;
+            })
+            .sort((a, b) => { // Sort by declared weight for the current round, then by starting number
+                const weightA = getAthleteDeclaredWeightForRound(a, currentGlobalRound);
+                const weightB = getAthleteDeclaredWeightForRound(b, currentGlobalRound);
+                if (weightA === weightB) {
+                    const indexA = parseInt(String(a.nrStartowy || a.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+                    const indexB = parseInt(String(b.nrStartowy || b.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+                    return indexA - indexB;
                 }
-                return prevTime - 1;
+                return weightA - weightB;
             });
-        }, 1000);
-    }, [stopLocalTimer, stableSetTimerTimeLeft]); // Zależności
 
-    // Efekt do nasłuchiwania na eventy WebSocket
-    useEffect(() => {
-        if (!socket) {
-            console.log('[AthleteViewScreen] Socket not available for listening.');
-            return; // Nie rób nic, jeśli socket nie jest połączony
+        if (upcomingAthletesForRound.length > 0) {
+            const foundNextAthlete = upcomingAthletesForRound[0];
+            const declaredWeight = getAthleteDeclaredWeightForRound(foundNextAthlete, currentGlobalRound);
+            return {
+                imie: foundNextAthlete.imie,
+                nazwisko: foundNextAthlete.nazwisko,
+                klub: foundNextAthlete.klub || 'Brak klubu',
+                attemptInfo: `Runda ${currentGlobalRound} (${declaredWeight ? String(declaredWeight).replace(',', '.') + 'kg' : 'Brak deklaracji'})`,
+            };
         }
-        console.log('[AthleteViewScreen] Setting up socket listeners...');
+        return null;
+    }, [currentAthlete, zawodnicy, activeCategory, activeWeight, activeAttemptNr]);
 
-        const handleTimerStarted = (data) => {
-            console.log('[AthleteViewScreen] Received timerStarted event', data);
-            setTimerActive(true); // Ustaw stan aktywności
-            setTimerTimeLeft(data.timeLeft || 60); // Ustaw czas początkowy
-            startLocalTimer(); // Uruchom lokalne odliczanie
-        };
 
-        const handleTimerStopped = (data) => {
-            console.log('[AthleteViewScreen] Received timerStopped event', data);
-            setTimerActive(false); // Zatrzymaj timer w stanie
-            stopLocalTimer(); // Zatrzymaj lokalne odliczanie
-            // Opcjonalnie: Ustaw finalny czas, jeśli backend go wysyła
-            // if (data && data.finalTimeLeft !== undefined) {
-            //   setTimerTimeLeft(data.finalTimeLeft);
-            // }
-        };
+    const podiumAthletes = useMemo(() => {
+        if (!activeCategory || !activeWeight || !zawodnicy || zawodnicy.length === 0) return [];
+        const athletesInCatWeight = zawodnicy.filter(z => z.kategoria === activeCategory && String(z.waga) === String(activeWeight));
+        if (athletesInCatWeight.length === 0) return [];
 
-        socket.on('timerStarted', handleTimerStarted);
-        socket.on('timerStopped', handleTimerStopped);
+        const processed = processAthletesForResults(athletesInCatWeight);
+        const sorted = sortIndividualResults(processed);
+        return sorted.slice(0, 3).map((athlete, index) => ({ ...athlete, rank: index + 1 }));
+    }, [zawodnicy, activeCategory, activeWeight]);
 
-        // Cleanup listeners on unmount or when socket changes
-        return () => {
-            console.log('[AthleteViewScreen] Cleaning up socket listeners.');
-            socket.off('timerStarted', handleTimerStarted);
-            socket.off('timerStopped', handleTimerStopped);
-            stopLocalTimer(); // Zatrzymaj lokalny timer przy odmontowaniu
-        };
-    }, [socket, setTimerActive, setTimerTimeLeft, startLocalTimer, stopLocalTimer]); // Dodaj zależności
-    // --- KONIEC ZMIANY: Logika lokalnego timera ---
+
+    const shouldShowNextUp = currentAthlete && nextAthleteData && !showManuallyRequestedResultsForGroup && !temporaryResultsInfo && !showAnimation;
+    const shouldShowPodium = podiumAthletes.length > 0 && !showManuallyRequestedResultsForGroup && !temporaryResultsInfo && !showAnimation && currentAthlete;
+
+
+    // --- Render Logic ---
+    if (showAnimation) {
+        return (
+            <View style={styles.animationOverlay}>
+                <AttemptResultAnimation success={animationSuccess} />
+            </View>
+        );
+    }
+
+    if (temporaryResultsInfo) {
+        return (
+            <TemporaryResultsViewer
+                category={temporaryResultsInfo.category}
+                weightClass={temporaryResultsInfo.weightClass}
+                onDismiss={() => setTemporaryResultsInfo(null)}
+            />
+        );
+    }
+
+    if (showManuallyRequestedResultsForGroup) {
+        const athletesForTable = zawodnicy.filter(
+            z => z.kategoria === showManuallyRequestedResultsForGroup.category && String(z.waga) === String(showManuallyRequestedResultsForGroup.weight)
+        );
+        const processedData = processAthletesForResults(athletesForTable);
+        const sortedData = sortIndividualResults(processedData).map((item, index) => ({ ...item, rank: index + 1 }));
+        return (
+            <View style={[styles.container, styles.resultsViewContainer]}>
+                <Text style={styles.resultsTitle}>
+                    Wyniki Grupy: {showManuallyRequestedResultsForGroup.category} - {showManuallyRequestedResultsForGroup.weight} kg
+                </Text>
+                {sortedData.length > 0 ? (
+                    <ScrollView contentContainerStyle={{paddingBottom: 60, width: '100%'}}>
+                        <IndividualResultsTable data={sortedData} />
+                    </ScrollView>
+                ) : (
+                    <Text style={styles.placeholderText}>Brak danych do wyświetlenia dla tej grupy.</Text>
+                )}
+                {/* USUNIĘTY PRZYCISK "Zamknij Wyniki" STĄD */}
+            </View>
+        );
+    }
 
     return (
-        <View style={styles.container}>
-            {/* Nagłówek (bez zmian) */}
-            <LinearGradient colors={[colors.gradient.start, colors.gradient.end]} style={styles.header}>
-                <Text style={styles.competitionTitle}>{zawody.nazwa || 'Zawody'}</Text>
-                {/* --- POCZĄTEK ZMIANY: Dodaj info o grupie w nagłówku --- */}
-                {activeCategory && activeWeight && (
-                    <Text style={styles.groupInfoTitle}>
-                        Grupa: {activeCategory} / {activeWeight} kg
-                    </Text>
-                )}
-                {/* --- KONIEC ZMIANY --- */}
-            </LinearGradient>
+        <LinearGradient colors={[colors.backgroundDark, colors.primaryDarker || '#101d5a']} style={styles.container}>
+            <View style={styles.header}>
+                {/* ZMIENIONE: Użycie statycznych logotypów */}
+                <Image source={startStrzegomLogo} style={styles.logoLeft} resizeMode="contain" />
+                <Text style={styles.competitionName} numberOfLines={2}>{zawody?.nazwa || 'Zawody Wyciskania Sztangi Leżąc'}</Text>
+                <Image source={relaxKamiennaGoraLogo} style={styles.logoRight} resizeMode="contain" />
+            </View>
 
-            {/* Główna zawartość */}
             <View style={styles.mainContent}>
-                {/* --- POCZĄTEK ZMIANY: Logika wyboru widoku --- */}
-                {activeAthleteOriginalIndex !== null && currentAthlete ? (
-                    // Widok szczegółowy aktywnego zawodnika
-                    <>
-                        {/* Informacje o zawodniku */}
-                        <View style={styles.athleteInfoCard}>
-                            <Text style={styles.athleteName}>{currentAthlete.imie} {currentAthlete.nazwisko}</Text>
-                            <Text style={styles.athleteClub}>{currentAthlete.klub || 'Brak klubu'}</Text>
-                            <Text style={styles.athleteCategory}>
-                                Kat: {currentAthlete.kategoria} / Waga: {currentAthlete.waga} kg
-                            </Text>
+                {currentAthlete ? (
+                    <ScrollView contentContainerStyle={styles.scrollContentContainer} showsVerticalScrollIndicator={false}>
+                        <View style={styles.athleteDetailContainer}>
+                            {/* New container for AthleteInfoCard and Timer */}
+                            <View style={styles.athleteInfoTimerRow}>
+                                <View style={styles.athleteInfoCardWrapper}>
+                                    <View style={styles.athleteInfoCard}>
+                                        <Text style={styles.athleteName}>
+                                            {currentAthlete.imie} {currentAthlete.nazwisko}
+                                        </Text>
+                                        <Text style={styles.athleteClub}>
+                                            {currentAthlete.klub || 'Brak klubu'}
+                                        </Text>
+                                        <View style={styles.athleteMetaRow}>
+                                            <Text style={styles.athleteCategory}>
+                                                {currentAthlete.kategoria} / {currentAthlete.waga}kg
+                                            </Text>
+                                            <Text style={styles.athleteRoundInfo}>
+                                                # Runda: {activeAttemptNr || '-'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                {timerActive && activeAthleteOriginalIndex === currentAthlete.originalIndex && (
+                                    <View style={styles.timerWrapper}>
+                                        <FinalAthleteViewTimerDisplay isActive={timerActive} timeLeft={timerTimeLeft} />
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.attemptsRowContainer}>
+                                {[1,2,3].map(num => (
+                                    <AttemptDisplay
+                                        key={num}
+                                        number={num}
+                                        weight={currentAthlete[`podejscie${num}`]}
+                                        status={currentAthlete[`podejscie${num}Status`]}
+                                        isActive={num === activeAttemptNr && activeAthleteOriginalIndex === currentAthlete.originalIndex}
+                                    />
+                                ))}
+                            </View>
+
+                            <View style={styles.bottomInfoContainer}>
+                                {shouldShowNextUp && <NextAthleteUp athlete={nextAthleteData} />}
+                                {shouldShowPodium && <PodiumDisplay athletes={podiumAthletes} />}
+                            </View>
                         </View>
-                        {/* Wyświetlanie podejść */}
-                        <View style={styles.attemptsContainer}>
-                            <Text style={styles.sectionTitle}>Podejścia</Text>
-                            {[1, 2, 3].map((nr) => (
-                                <AttemptDisplay
-                                    key={nr}
-                                    number={nr}
-                                    weight={currentAthlete[`podejscie${nr}`]}
-                                    status={currentAthlete[`podejscie${nr}Status`]}
-                                    isActive={activeAttemptNr === nr}
-                                />
-                            ))}
-                        </View>
-                        {/* Wyświetlanie Timera */}
-                        <View style={styles.timerSection}>
-                             <Text style={styles.sectionTitle}>Czas</Text>
-                             <TimerDisplay isActive={timerActive} timeLeft={timerTimeLeft} />
-                        </View>
-                    </>
+                    </ScrollView>
                 ) : activeCategory && activeWeight ? (
-                    // Widok listy zawodników w grupie
-                    <View style={styles.groupViewContainer}>
-                         <Text style={styles.sectionTitle}>Lista zawodników w grupie</Text>
-                         {/* Przekaż activeAthleteOriginalIndex do podświetlenia */}
+                     <View style={styles.groupViewContainer}>
+                         <Text style={styles.groupHeader}>Grupa: {activeCategory} - {activeWeight}kg</Text>
                          <GroupAthleteList
                             athletes={groupAthletes}
-                            currentAthleteOriginalIndex={activeAthleteOriginalIndex}
+                            currentAthleteOriginalIndex={null}
                          />
                     </View>
                 ) : (
-                    // Placeholder, gdy nie wybrano grupy
+                    // ... (istniejący placeholder)
                     <View style={styles.placeholderContainer}>
-                        <Text style={styles.placeholderText}>Wybierz grupę w panelu sędziego...</Text>
+                        <MaterialCommunityIcons name="trophy-variant-outline" size={80} color={colors.textLight + '55'} />
+                        <Text style={styles.placeholderText}>Wybierz kategorię i wagę w panelu sędziego, aby zobaczyć listę zawodników lub aktywnego zawodnika.</Text>
+                        <Text style={styles.placeholderSubText}>Ekran widowni jest gotowy!</Text>
                     </View>
                 )}
-                {/* --- KONIEC ZMIANY --- */}
             </View>
-        </View>
+        </LinearGradient>
     );
 }
 
-// --- Style ---
 const styles = StyleSheet.create({
-    // ... (istniejące style container, header, competitionTitle) ...
-    container: { flex: 1, backgroundColor: colors.backgroundDark },
-    header: { paddingTop: spacing.xxl, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', ...shadows.medium },
-    competitionTitle: { fontSize: font.sizes['4xl'], fontWeight: font.weights.bold, color: colors.textMainTitle, fontFamily: font.family, textAlign: 'center' },
-    // --- POCZĄTEK ZMIANY: Styl dla info o grupie ---
-    groupInfoTitle: {
-        fontSize: font.sizes.md,
-        color: colors.textLight + 'cc',
-        marginTop: spacing.xs,
-    },
-    // --- KONIEC ZMIANY ---
-    mainContent: { flex: 1, padding: spacing.xl, justifyContent: 'flex-start', alignItems: 'center' }, // Zmieniono justifyContent
-    placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }, // Dodano flex: 1
-    placeholderText: { fontSize: font.sizes['2xl'], color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center' }, // Dodano textAlign
-    athleteInfoCard: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.lg, marginBottom: spacing.xl, alignItems: 'center', width: '90%', ...shadows.medium },
-    athleteName: { fontSize: font.sizes['3xl'], fontWeight: font.weights.bold, color: colors.primary, marginBottom: spacing.sm, textAlign: 'center' },
-    athleteClub: { fontSize: font.sizes.lg, color: colors.textSecondary, marginBottom: spacing.xs, textAlign: 'center' },
-    athleteCategory: { fontSize: font.sizes.md, color: colors.textSecondary, textAlign: 'center' },
-    sectionTitle: { fontSize: font.sizes.xl, fontWeight: font.weights.semibold, color: colors.text, marginBottom: spacing.md, textAlign: 'center', width: '100%' },
-    attemptsContainer: { width: '90%', marginBottom: spacing.xl, alignItems: 'center' },
-    attemptBox: { backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', borderWidth: 2, borderColor: 'transparent' },
-    attemptBoxActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-    attemptNumber: { fontSize: font.sizes.lg, color: colors.textSecondary, flex: 0.3 }, // Dostosuj flex
-    attemptWeight: { fontSize: font.sizes['2xl'], fontWeight: font.weights.bold, color: colors.text, flex: 0.4, textAlign: 'center' }, // Dostosuj flex
-    attemptStatus: { flex: 0.3, alignItems: 'flex-end' }, // Dostosuj flex
-    timerSection: { width: '90%', alignItems: 'center' },
-    timerContainer: {},
-    timerText: { fontSize: font.sizes['6xl'], fontWeight: font.weights.bold, color: colors.text, fontFamily: font.familyMono },
-    timerWarning: { color: colors.warning },
-    timerFinished: { color: colors.error },
-
-    // --- POCZĄTEK ZMIANY: Style dla widoku listy grupy ---
-    groupViewContainer: {
-        width: '95%', // Szerszy kontener dla listy
-        flex: 1, // Aby zajął dostępną przestrzeń
-    },
-    groupListScroll: {
+    container: {
         flex: 1,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.lg, // Ten padding już zapewnia odstęp, ale możemy dodać marginesy do samych logo
+        paddingTop: Platform.OS === 'web' ? spacing.md : spacing.xl + spacing.sm,
+        paddingBottom: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.primary + '50',
+    },
+    logoLeft: { 
+        width: (Platform.OS === 'web' ? 120 : 100) * 2.5, 
+        height: (Platform.OS === 'web' ? 60 : 50) * 2.5,  
+        alignSelf: 'center',
+        marginLeft: spacing.lg, // DODANO: Odstęp od lewej krawędzi
+    },
+    logoRight: { 
+        width: (Platform.OS === 'web' ? 80 : 70) * 2, 
+        height: (Platform.OS === 'web' ? 80 : 70) * 2,
+        borderRadius: (Platform.OS === 'web' ? 40 : 35) * 2, 
+        alignSelf: 'center',
+        backgroundColor: colors.surface + '22', 
+        marginRight: spacing.lg, // DODANO: Odstęp od prawej krawędzi
+    },
+    competitionName: {
+        fontSize: Platform.OS === 'web' ? font.sizes['3xl'] : font.sizes['2xl'],
+        fontWeight: font.weights.bold,
+        color: colors.textLight,
+        textAlign: 'center',
+        flex: 1, 
+        marginHorizontal: spacing.sm,
+    },
+    mainContent: {
+        flex: 1,
+        padding: spacing.md,
+    },
+    scrollContentContainer: {
+        flexGrow: 1,
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        paddingBottom: spacing.xl,
+    },
+    athleteDetailContainer: {
+        flex: 1,
+        alignItems: 'center',
         width: '100%',
+        maxWidth: 1200,
+        paddingHorizontal: Platform.OS === 'web' ? spacing.xl : spacing.sm,
     },
-    groupListItem: {
-        backgroundColor: colors.surface,
-        borderRadius: borderRadius.md,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-        marginBottom: spacing.sm,
+    athleteInfoTimerRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        ...shadows.small,
+        justifyContent: 'space-between',
+        width: '100%',
+        marginBottom: spacing.lg,
+        gap: spacing.lg,
     },
-    groupListItemCompleted: {
-         backgroundColor: colors.surfaceVariant + '99',
-         opacity: 0.8,
+    athleteInfoCardWrapper: {
+        flex: 1,
+        maxWidth: 700,
     },
-    groupListRank: {
-        width: 30,
+    athleteInfoCard: {
+        backgroundColor: colors.surface + '1A',
+        paddingVertical: spacing.lg,
+        paddingHorizontal: spacing.xl,
+        borderRadius: borderRadius.xl,
         alignItems: 'center',
-        marginRight: spacing.sm,
+        width: '100%',
+        ...shadows.medium,
     },
-    groupListRankText: {
-        fontSize: font.sizes.sm,
-        color: colors.textSecondary,
-        fontWeight: font.weights.medium,
+    athleteName: {
+        fontSize: font.sizes['4xl'],
+        fontWeight: font.weights.bold,
+        color: colors.textLight,
+        marginBottom: spacing.xs,
+        textAlign: 'center',
     },
-    groupListInfo: {
-        flex: 1, // Zajmuje większość miejsca
-        marginRight: spacing.sm,
+    athleteClub: {
+        fontSize: font.sizes.xl,
+        color: colors.textLight + 'cc',
+        fontStyle: 'italic',
+        marginBottom: spacing.md,
+        textAlign: 'center',
     },
-    groupListName: {
-        fontSize: font.sizes.md,
+    athleteMetaRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        width: '90%',
+        marginTop: spacing.sm,
+    },
+    athleteCategory: {
+        fontSize: font.sizes.lg,
+        color: colors.textLight + 'aa',
+    },
+    athleteRoundInfo: {
+        fontSize: font.sizes.lg,
+        color: colors.accent,
         fontWeight: font.weights.semibold,
-        color: colors.text,
     },
-    groupListClub: {
-        fontSize: font.sizes.xs,
-        color: colors.textSecondary,
-    },
-    groupListAttempts: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        minWidth: 120, // Stała szerokość dla kolumny podejść
-    },
-    groupListAttempt: {
-        flexDirection: 'row',
+    timerWrapper: {
         alignItems: 'center',
-        marginLeft: spacing.sm,
-        minWidth: 35, // Minimalna szerokość dla pojedynczego podejścia
-        justifyContent: 'flex-end',
     },
-    groupListAttemptWeight: {
-        fontSize: font.sizes.sm,
-        color: colors.text,
-        marginRight: spacing.xxs,
+    attemptsRowContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-around', 
+        alignItems: 'center', 
+        marginVertical: spacing.lg,
+        gap: spacing.lg, 
+        width: '100%',
+        paddingHorizontal: spacing.sm, 
     },
-     groupListCompletedIcon: {
-        marginLeft: spacing.sm,
-     },
-    // Dodaj styl dla aktywnego elementu listy grupy
-    groupListItemActive: {
-        backgroundColor: colors.primary + '20', // Lekkie tło primary
-        borderColor: colors.primary,
-        borderWidth: 1,
-    }
-    // --- KONIEC ZMIANY ---
+    bottomInfoContainer: {
+        flexDirection: Platform.OS === 'web' ? 'row' : 'column',
+        justifyContent: 'space-between',
+        alignItems: 'stretch',
+        width: '100%',
+        marginTop: spacing.lg,
+        gap: spacing.lg,
+    },
+    groupViewContainer: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    groupHeader: {
+        fontSize: font.sizes['2xl'],
+        fontWeight: font.weights.bold,
+        color: colors.textLight,
+        marginBottom: spacing.lg,
+        textAlign: 'center',
+    },
+    placeholderContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.xl,
+    },
+    placeholderText: {
+        fontSize: font.sizes.xl,
+        color: colors.textLight + 'cc',
+        textAlign: 'center',
+        paddingHorizontal: spacing.lg,
+        marginTop: spacing.md,
+        lineHeight: font.sizes.xl * 1.4,
+    },
+    placeholderSubText: {
+        fontSize: font.sizes.lg,
+        color: colors.textLight + '88',
+        textAlign: 'center',
+        marginTop: spacing.sm,
+    },
+    animationOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    resultsViewContainer: { // Styl dla kontenera wyników manualnych
+        flex: 1,
+        paddingHorizontal: spacing.md,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.xl, // Dodajemy padding na dole, jeśli przycisk jest usunięty
+        backgroundColor: colors.backgroundDark, // Upewnij się, że tło jest spójne
+        alignItems: 'center',
+    },
+    resultsTitle: {
+        fontSize: font.sizes['2xl'],
+        fontWeight: font.weights.bold,
+        color: colors.textLight,
+        marginVertical: spacing.lg,
+        textAlign: 'center',
+    },
+    // Styl closeResultsButton i closeResultsButtonText można usunąć, jeśli przycisk jest całkowicie usuwany
+    // Jeśli jednak chcesz go zachować gdzieś indziej, pozostaw style.
+    // Na potrzeby tego zadania, zakładam, że przycisk jest usuwany całkowicie z tego widoku.
 });

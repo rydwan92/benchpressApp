@@ -62,7 +62,7 @@ export default function App() {
             <Stack.Screen
               name="Report" // Nazwa używana w NavBar i linkowaniu
               component={ReportScreen}
-              options={{ title: 'Help' }}
+              options={{ title: 'Ekran pomost' }} // ZMIENIONY TYTUŁ (OPCJONALNIE)
             />
           </Stack.Navigator>
         </NavigationContainer>

@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
-import { useCompetitionStore } from '../../store/useCompetitionStore';
+import useCompetitionStore  from '../../store/useCompetitionStore';
 import { colors } from '../../theme/theme';
 import styles from '../../styles/RegistrationStyles/CompetitionInfoForm.styles';
 import { saveAppData } from '../../utils/api';

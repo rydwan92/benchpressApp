@@ -1,47 +1,60 @@
-// filepath: c:\Users\Michał\Desktop\benchpress-competition-app\backend\stateManager.js
-import { readData, writeData } from './utils/fileHandler.js';
+// filepath: c:\benchpress-competition-app\backend\stateManager.js
+import { readAppDataFromFile } from './controllers/appDataController.js';
 
 let currentAppState = null;
 
-const initializeState = () => {
+// Export initializeState to be called and awaited from server.js
+export const initializeState = async () => {
     try {
-        currentAppState = readData();
+        console.log('[StateManager] Initializing state from file...');
+        currentAppState = await readAppDataFromFile();
+
+        // Ensure essential properties exist, even if readAppDataFromFile returns a minimal default on error
         if (!currentAppState) {
-            console.warn('[StateManager] readData() returned empty state. Initializing with default structure.');
-            currentAppState = {
-                zawody: { nazwa: '', miejsce: '', data: '', sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
+             console.error('[StateManager] CRITICAL: readAppDataFromFile returned null/undefined. This should not happen. Initializing emergency default.');
+             currentAppState = { // Emergency default
+                zawody: { nazwa: 'Emergency Default', miejsce: '', data: new Date().toISOString().slice(0,10), sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
                 kategorie: [], zawodnicy: [], activeCategory: null, activeWeight: null,
-                activeAthleteOriginalIndex: null, activeAttemptNr: 1, timerActive: false, timerTimeLeft: 60,
-            };
-            // Opcjonalnie: Zapisz domyślny stan
-            // writeData(currentAppState);
+                activeAthleteOriginalIndex: null, activeAttemptNr: 1, currentRound: 1, timerActive: false, timerTimeLeft: 60,
+             };
         }
+        // Ensure all expected top-level UI state keys are present if not loaded
+        const defaultUIState = {
+            activeCategory: null, activeWeight: null,
+            activeAthleteOriginalIndex: null, activeAttemptNr: 1, currentRound: 1,
+            timerActive: false, timerTimeLeft: 60
+        };
+        for (const key in defaultUIState) {
+            if (currentAppState[key] === undefined) {
+                currentAppState[key] = defaultUIState[key];
+            }
+        }
+
+
         console.log('[StateManager] Initial state loaded/initialized successfully.');
     } catch (error) {
-        console.error('[StateManager] CRITICAL ERROR during initial state read:', error);
-        console.warn('[StateManager] Initializing with default structure due to error.');
+        console.error('[StateManager] CRITICAL ERROR during initial state read from file:', error);
+        console.warn('[StateManager] Initializing with fallback default structure due to error.');
         currentAppState = {
-            zawody: { nazwa: '', miejsce: '', data: '', sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
+            zawody: { nazwa: 'Fallback Competition', miejsce: '', data: new Date().toISOString().slice(0,10), sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
             kategorie: [], zawodnicy: [], activeCategory: null, activeWeight: null,
-            activeAthleteOriginalIndex: null, activeAttemptNr: 1, timerActive: false, timerTimeLeft: 60,
+            activeAthleteOriginalIndex: null, activeAttemptNr: 1, currentRound: 1, timerActive: false, timerTimeLeft: 60,
         };
     }
 };
 
-// Wywołaj inicjalizację od razu przy ładowaniu modułu
-initializeState();
-
 export const getCurrentAppState = () => {
     if (currentAppState === null) {
-         console.error('[StateManager] CRITICAL: Attempted to get state before initialization!');
-         // Zwróć kopię struktury domyślnej, aby uniknąć null pointerów w dalszej części kodu
+         console.error('[StateManager] CRITICAL: Attempted to get state before initialization was complete!');
+         // Return a copy of a minimal default structure to avoid null pointers
          return {
-            zawody: { nazwa: '', miejsce: '', data: '', sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
+            zawody: { nazwa: 'Uninitialized State', miejsce: '', data: new Date().toISOString().slice(0,10), sedzia: { imie: '', nazwisko: '', avatar: null }, klubAvatar: null },
             kategorie: [], zawodnicy: [], activeCategory: null, activeWeight: null,
-            activeAthleteOriginalIndex: null, activeAttemptNr: 1, timerActive: false, timerTimeLeft: 60,
+            activeAthleteOriginalIndex: null, activeAttemptNr: 1, currentRound: 1, timerActive: false, timerTimeLeft: 60,
         };
     }
-    return currentAppState;
+    // Zwróć głęboką kopię stanu, aby uniknąć modyfikacji przez referencję
+    return JSON.parse(JSON.stringify(currentAppState));
 };
 
 export const updateServerState = (newState) => {
@@ -50,6 +63,12 @@ export const updateServerState = (newState) => {
         console.error('[StateManager] Received invalid newState:', newState);
         return;
     }
-    currentAppState = newState;
-    console.log(`[StateManager] State updated. Timer active: ${currentAppState.timerActive}`);
+    // Zamiast bezpośredniego przypisania, można rozważyć głębokie scalenie,
+    // ale jeśli newState jest kompletnym stanem, bezpośrednie przypisanie jest OK.
+    // Upewnij się, że newState jest kompletnym i poprawnym obiektem stanu.
+    currentAppState = JSON.parse(JSON.stringify(newState)); // Zapisz kopię, aby uniknąć problemów z referencjami
+    console.log(`[StateManager] State updated. Timer active: ${currentAppState.timerActive}, TimeLeft: ${currentAppState.timerTimeLeft}`);
 };
+
+// DO NOT call initializeState() here anymore. It will be called from server.js
+// initializeState(); // REMOVE OR COMMENT OUT THIS LINE
