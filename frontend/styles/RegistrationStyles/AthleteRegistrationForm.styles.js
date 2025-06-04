@@ -16,12 +16,28 @@ export default StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
-  input: {
-    ...componentStyles.input, // Użyj stylu bazowego
-    marginBottom: 0, // Usuń domyślny margines dolny z componentStyles.input
+  inputWrapper: { // Nowy styl
+    flexDirection: 'row',
+    alignItems: 'center',
+    // Ramka będzie na samym TextInput
   },
-
-  // Radio buttons (Płeć)
+  input: {
+    ...componentStyles.input,
+    marginBottom: 0,
+    flex: 1, // Aby input zajął dostępną przestrzeń obok ikony
+  },
+  inputValid: { // Nowy styl dla poprawnego inputu
+    borderColor: colors.success || '#28a745', // Użyj koloru sukcesu z motywu lub domyślnego zielonego
+    // Zakładamy, że componentStyles.input już ma borderWidth. Jeśli nie, dodaj:
+    // borderWidth: 1,
+  },
+  validIcon: { // Nowy styl dla ikony "tick"
+    marginLeft: spacing.sm,
+  },
+  inputDisabled: { // Nowy styl dla zablokowanego inputu
+    backgroundColor: colors.surfaceVariant, // Lekko inne tło
+    color: colors.textSecondary, // Ciemniejszy tekst, aby wskazać nieaktywność
+  },
   radioRow: {
     marginBottom: spacing.md,
   },
@@ -37,8 +53,14 @@ export default StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.surface,
+    transition: 'transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease', // Dodano transition
   },
   radioBtnActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  radioBtnHover: { // Nowy styl dla hover
+    transform: [{ scale: 1.05 }],
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
@@ -61,36 +83,47 @@ export default StyleSheet.create({
     marginBottom: spacing.xs,
   },
   selectScroll: {
+    // Styl dla kontenera ScrollView, jeśli potrzebny
     // Można dodać np. lekkie tło, aby odróżnić obszar przewijania
     // backgroundColor: colors.background,
     // borderRadius: borderRadius.sm,
   },
   selectList: {
     flexDirection: 'row', // Elementy w rzędzie
+    flexWrap: 'wrap', // Zawijanie elementów <--- TO JEST KLUCZOWE DLA SPADANIA
     gap: spacing.sm, // Odstęp między elementami
-    paddingVertical: spacing.xs, // Dodaj trochę pionowego paddingu dla estetyki
+    paddingVertical: spacing.xs, 
+    justifyContent: 'center', // Wyśrodkowanie elementów w poziomie
   },
   selectItem: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.full,
+    borderRadius: borderRadius.full, 
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    // Usunięto transition - nie jest standardem w React Native
-    // transition: 'border-color 0.2s ease-in-out, background-color 0.2s ease-in-out',
+    borderWidth: 1, // Upewniamy się, że szerokość ramki jest zdefiniowana
+    borderColor: colors.primary, // ZMIANA: Stałe niebieskie obramowanie
+    transition: 'transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
+    flexGrow: 0,      
+    flexShrink: 1,    
+    minWidth: 80,     // Minimalna szerokość pigułki
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    marginBottom: spacing.xs, // Odstęp dla zawiniętych pigułek
   },
   selectItemActive: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    borderColor: colors.primary, // Pozostaje niebieskie dla aktywnego
   },
-  selectItemHover: { // Styl hover dla web
-    borderColor: colors.primary,
+  selectItemHover: { // Styl dla hover na web
+    transform: [{ scale: 1.05 }],
+    backgroundColor: colors.primary,
+    borderColor: colors.primary, // Pozostaje niebieskie dla hover
   },
   selectItemText: {
     color: colors.text,
     fontWeight: font.weights.medium,
     fontSize: font.sizes.sm,
+    textAlign: 'center', // Upewnij się, że tekst jest wyśrodkowany
   },
   selectItemTextActive: {
     color: colors.textLight,
@@ -172,5 +205,22 @@ export default StyleSheet.create({
     ...componentStyles.notification.text, // Użyj stylu bazowego
     flex: 1, // Aby tekst zajął resztę miejsca
     textAlign: 'left', // Wyrównaj do lewej
+  },
+
+  // Nowe style dla karty
+  cardWrapper: {
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    ...shadows.small,
+    marginBottom: spacing.lg,
+  },
+
+  // Nowy styl dla tytułu formularza
+  formTitle: {
+    ...componentStyles.componentTitle,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+    letterSpacing: 2,
   },
 });

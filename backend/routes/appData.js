@@ -1,50 +1,47 @@
 import express from 'express';
-import { writeData } from '../utils/fileHandler.js';
+// import { writeData } from '../utils/fileHandler.js'; // REMOVE THIS LINE
+import { writeAppDataToFile } from '../controllers/appDataController.js'; // UPDATED IMPORT (adjust path if necessary)
 import { getCurrentAppState, updateServerState } from '../stateManager.js';
 
 const router = express.Router();
 
-// Odczyt danych (GET) - Zwróć stan z pamięci serwera
+// GET handler remains the same, serving from stateManager's in-memory state
 router.get('/', (req, res) => {
-    // --- START ZMIANY: Dodaj więcej logowania ---
     console.log('[GET /api/appData] Handler reached.');
     try {
         console.log('[GET /api/appData] Calling getCurrentAppState()...');
-        const state = getCurrentAppState(); // Pobierz aktualny stan
-        console.log(`[GET /api/appData] State received from getCurrentAppState(). Type: ${typeof state}, Keys: ${state ? Object.keys(state).join(', ') : 'N/A'}`);
+        const state = getCurrentAppState();
+        console.log(`[GET /api/appData] State received. Type: ${typeof state}, Keys: ${state ? Object.keys(state).join(', ') : 'N/A'}`);
 
-        // Sprawdź, czy stan jest poprawny przed wysłaniem
-        if (state === null || typeof state === 'undefined') {
-             console.error('[GET /api/appData] CRITICAL: getCurrentAppState() returned null or undefined!');
-             return res.status(500).json({ error: 'Internal Server Error: Application state is unavailable.' });
+        if (state === null || typeof state === 'undefined' || Object.keys(state).length === 0) { // More robust check
+             console.error('[GET /api/appData] CRITICAL: getCurrentAppState() returned invalid state!');
+             return res.status(500).json({ error: 'Internal Server Error: Application state is unavailable or invalid.' });
         }
 
         console.log('[GET /api/appData] Sending state as JSON response.');
         res.json(state);
         console.log('[GET /api/appData] JSON response sent.');
-        // --- KONIEC ZMIANY ---
     } catch (e) {
-        // --- START ZMIANY: Loguj błąd przed wysłaniem odpowiedzi ---
         console.error('[GET /api/appData] Error in GET handler:', e);
-        // --- KONIEC ZMIANY ---
         res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
 });
 
-// Zapis danych (POST)
+// POST handler updated to use writeAppDataToFile
 router.post('/', async (req, res) => {
     const newData = req.body;
     console.log('--- Received data on POST /api/appData ---');
     console.log(`Received data keys: ${Object.keys(newData).join(', ')}`);
-    // Dodaj logowanie kluczowych elementów stanu UI
-    console.log(`UI State Received: ActiveCat=${newData.activeCategory}, ActiveW=${newData.activeWeight}, ActiveIdx=${newData.activeAthleteOriginalIndex}, Timer=${newData.timerActive}`);
+    console.log(`UI State Received: ActiveCat=${newData.activeCategory}, ActiveW=${newData.activeWeight}, ActiveIdx=${newData.activeAthleteOriginalIndex}, Timer=${newData.timerActive}, TimeLeft=${newData.timerTimeLeft}`);
     console.log('--- End of received data ---');
-    try {
-        // --- START ZMIANY: Zachowaj istniejący stan timera, jeśli nie został przesłany ---
-        const currentState = getCurrentAppState(); // Pobierz aktualny stan serwera PRZED zapisem
-        const stateToSave = { ...newData }; // Skopiuj nowe dane, aby nie modyfikować req.body
+    
+    let writeTimeMeasurement;
 
-        // Jeśli w newData brakuje informacji o timerze, użyj wartości z aktualnego stanu serwera
+    try {
+        const currentState = getCurrentAppState();
+        const stateToSave = { ...newData };
+
+        // Preserve timer state if not explicitly provided in newData
         if (newData.timerActive === undefined && currentState.timerActive !== undefined) {
             console.log(`[POST /api/appData] Preserving existing timerActive state: ${currentState.timerActive}`);
             stateToSave.timerActive = currentState.timerActive;
@@ -53,33 +50,28 @@ router.post('/', async (req, res) => {
             console.log(`[POST /api/appData] Preserving existing timerTimeLeft state: ${currentState.timerTimeLeft}`);
             stateToSave.timerTimeLeft = currentState.timerTimeLeft;
         }
-        // --- KONIEC ZMIANY ---
 
-        console.time('writeDataDuration');
-        // --- START ZMIANY: Zapisz stan z potencjalnie zachowanym timerem ---
-        await writeData(stateToSave); // Zapisz stateToSave do pliku
-        // --- KONIEC ZMIANY ---
-        console.timeEnd('writeDataDuration');
+        writeTimeMeasurement = 'writeAppDataToFileDuration';
+        console.time(writeTimeMeasurement);
+        await writeAppDataToFile(stateToSave); // Use the new async file writing function
+        console.timeEnd(writeTimeMeasurement);
 
-        // --- START ZMIANY: Zaktualizuj stan serwera stanem z potencjalnie zachowanym timerem ---
-        updateServerState(stateToSave); // Zaktualizuj stan w pamięci serwera
-        // --- KONIEC ZMIANY ---
+        updateServerState(stateToSave); // Update in-memory state
 
-        // Emituj event 'dataUpdated'
         if (req.io) {
-            console.log('Data saved. Emitting dataUpdated event via WebSocket.');
-            // --- START ZMIANY: Wyślij stan z potencjalnie zachowanym timerem ---
+            console.log('[POST /api/appData] Data saved. Emitting dataUpdated event via WebSocket.');
             console.log(`Emitting UI State via dataUpdated: ActiveIdx=${stateToSave.activeAthleteOriginalIndex}, Timer=${stateToSave.timerActive}, TimeLeft=${stateToSave.timerTimeLeft}`);
-            req.io.emit('dataUpdated', stateToSave); // Wyślij stateToSave
-            // --- KONIEC ZMIANY ---
+            req.io.emit('dataUpdated', stateToSave);
         } else {
-            console.warn('Socket.IO instance (req.io) not found. Cannot emit update.');
+            console.warn('[POST /api/appData] Socket.IO instance (req.io) not found. Cannot emit update.');
         }
 
-        res.json({ success: true });
+        res.json({ success: true, data: stateToSave }); // Send back the saved state
     } catch (e) {
-        console.timeEnd('writeDataDuration'); // Upewnij się, że jest też w catch
-        console.error('Error handling POST /api/appData:', e);
+        if (writeTimeMeasurement) {
+            console.timeEnd(writeTimeMeasurement); // Ensure timer ends on error
+        }
+        console.error('[POST /api/appData] Error handling POST request:', e);
         res.status(500).json({ success: false, error: e.message || 'Failed to save data' });
     }
 });

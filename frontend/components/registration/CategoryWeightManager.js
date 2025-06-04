@@ -1,19 +1,16 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, ScrollView, Dimensions, Platform,
-  LayoutAnimation, // Dodaj import
-  UIManager // Dodaj import
+  LayoutAnimation,
+  UIManager
 } from 'react-native';
-import { useCompetitionStore } from '../../store/useCompetitionStore';
+import  useCompetitionStore from '../../store/useCompetitionStore';
 import { saveAppData } from '../../utils/api';
-import { colors } from '../../theme/theme';
-import { AntDesign } from '@expo/vector-icons'; // Upewnij się, że jest importowane
+import { colors, spacing } from '../../theme/theme'; // Dodano import spacing
+import { AntDesign, FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons'; // Ensure FontAwesome is imported if used for wagiCounterIcon
 import styles from '../../styles/RegistrationStyles/CategoryWeightManager.styles';
+import { commonStyles } from '../../theme/common.js'; // Poprawny import wspólnych stylów
 
-const { width } = Dimensions.get('window');
-const isSmallDevice = width < 600;
-
-// Włącz LayoutAnimation dla Androida
 if (Platform.OS === 'android') {
   if (UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -27,10 +24,7 @@ export default function CategoryWeightManager() {
   const removeKategoria = useCompetitionStore(state => state.removeKategoria);
   const removeWaga = useCompetitionStore(state => state.removeWaga);
   const zawodnicy = useCompetitionStore(state => state.zawodnicy);
-  
-  
 
-  // Modal i formularz stanów
   const [modalKategoria, setModalKategoria] = useState(false);
   const [nowaKategoria, setNowaKategoria] = useState('');
   const [modalWaga, setModalWaga] = useState(false);
@@ -38,12 +32,11 @@ export default function CategoryWeightManager() {
   const [nowaWaga, setNowaWaga] = useState('');
   const [hoverKategoria, setHoverKategoria] = useState(null);
   const [hoverDeleteBtn, setHoverDeleteBtn] = useState(null);
-  const [hoverActionBtn, setHoverActionBtn] = useState(null); // Nowy stan dla przycisków akcji ('kategoria' lub 'waga')
-
-  // Powiadomienia
+  const [hoverActionBtn, setHoverActionBtn] = useState(null);
   const [notif, setNotif] = useState(null);
   const notifTimeout = useRef(null);
   const [confirmModal, setConfirmModal] = useState({ open: false, type: null, kategoria: null, waga: null });
+  const [deletingKategoria, setDeletingKategoria] = useState(null);
 
   function showNotif(msg, type) {
     setNotif({ msg, type });
@@ -51,16 +44,13 @@ export default function CategoryWeightManager() {
     notifTimeout.current = setTimeout(() => setNotif(null), 3000);
   }
 
-  // Funkcja synchronizująca – wysyła cały stan do backendu
   const syncData = async () => {
     try {
-      const state = useCompetitionStore.getState();
-      await saveAppData({
-        zawody: state.zawody,
-        kategorie: state.kategorie,
-        zawodnicy: state.zawodnicy,
-      });
-      showNotif('Dane zaktualizowane!', 'success');
+      const currentState = useCompetitionStore.getState();
+      // Usuń socket i attemptResultForAnimation przed wysłaniem, jeśli istnieją
+      const { socket, attemptResultForAnimation, ...dataToSend } = currentState;
+      await saveAppData(dataToSend);
+      // showNotif('Dane zaktualizowane!', 'success'); // Możesz przenieść notyfikację do funkcji wywołującej syncData
     } catch (error) {
       console.error('Błąd synchronizacji:', error);
       showNotif('Błąd synchronizacji!', 'error');
@@ -76,13 +66,12 @@ export default function CategoryWeightManager() {
       showNotif('Taka kategoria już istnieje!', 'error');
       return;
     }
-    // Wywołaj animację PRZED zmianą stanu
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     addKategoria(nowaKategoria.trim());
     setNowaKategoria('');
     setModalKategoria(false);
-    showNotif('Dodano kategorię!', 'success');
     await syncData();
+    showNotif('Dodano kategorię!', 'success'); // Przeniesiona notyfikacja
   };
 
   const handleAddWaga = async () => {
@@ -95,26 +84,20 @@ export default function CategoryWeightManager() {
       showNotif('Taka waga już istnieje w tej kategorii!', 'error');
       return;
     }
-    // Wywołaj animację PRZED zmianą stanu
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     addWaga(wybranaKategoria, nowaWaga.trim());
     setNowaWaga('');
     setWybranaKategoria('');
     setModalWaga(false);
-    showNotif('Dodano wagę!', 'success');
     await syncData();
+    showNotif('Dodano wagę!', 'success'); // Przeniesiona notyfikacja
   };
 
-  // Dodaj nowy stan:
-  const [deletingKategoria, setDeletingKategoria] = useState(null);
-
-  // Zmodyfikuj funkcję handleDeleteConfirm:
   const handleDeleteConfirm = async () => {
     try {
       const { type, kategoria, waga } = confirmModal;
 
       if (type === 'kategoria') {
-        // Sprawdź czy są zawodnicy w tej kategorii
         const zawodnicyWKategorii = zawodnicy.filter(z => z.kategoria === kategoria);
         if (zawodnicyWKategorii.length > 0) {
           showNotif(`Nie można usunąć - w kategorii "${kategoria}" są zawodnicy!`, 'error');
@@ -122,33 +105,28 @@ export default function CategoryWeightManager() {
           return;
         }
 
-        // Dodajemy wizualny feedback przed usunięciem
         setDeletingKategoria(kategoria);
-        // Wywołaj animację PRZED zmianą stanu (wewnątrz setTimeout)
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-        // Krótka pauza dla efektu wizualnego
         setTimeout(() => {
-          removeKategoria(kategoria); // Zmiana stanu
+          removeKategoria(kategoria); 
           setDeletingKategoria(null);
           showNotif(`Usunięto kategorię "${kategoria}" i wszystkie jej wagi!`, 'success');
           setConfirmModal({ open: false, type: null, kategoria: null, waga: null });
-          syncData(); // Synchronizacja z serwerem
-        }, 300); // Opóźnienie dla efektu wizualnego opacity
+          syncData(); 
+        }, 300); 
       } else if (type === 'waga') {
-        // Istniejący kod dla wagi...
         const zawodnicyWWadze = zawodnicy.filter(z => z.kategoria === kategoria && z.waga === waga);
         if (zawodnicyWWadze.length > 0) {
           showNotif(`Nie można usunąć - w wadze "${waga}" są zawodnicy!`, 'error');
           setConfirmModal({ open: false, type: null, kategoria: null, waga: null });
           return;
         }
-        // Wywołaj animację PRZED zmianą stanu
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        removeWaga(kategoria, waga); // Zmiana stanu
+        removeWaga(kategoria, waga); 
         showNotif(`Usunięto wagę "${waga}" z kategorii "${kategoria}"!`, 'success');
         setConfirmModal({ open: false, type: null, kategoria: null, waga: null });
-        syncData(); // Synchronizacja z serwerem
+        syncData(); 
       }
     } catch (error) {
       console.error('Błąd podczas usuwania:', error);
@@ -160,18 +138,16 @@ export default function CategoryWeightManager() {
   return (
     <View style={styles.container}>
       <Text style={styles.componentTitle}>
-      Wprowadź kategorie oraz wagi w turnieju
+      ZARZĄDZAJ
       </Text>
       
       <View style={styles.actionRow}>
         <TouchableOpacity
           style={[
             styles.actionBtn,
-            // Styl hover dla web
             Platform.OS === 'web' && hoverActionBtn === 'kategoria' && styles.actionBtnHover
           ]}
           onPress={() => setModalKategoria(true)}
-          // Dodajemy obsługę hover dla web
           {...(Platform.OS === 'web' && {
             onMouseEnter: () => setHoverActionBtn('kategoria'),
             onMouseLeave: () => setHoverActionBtn(null)
@@ -183,11 +159,9 @@ export default function CategoryWeightManager() {
         <TouchableOpacity
           style={[
             styles.actionBtn,
-            // Styl hover dla web
             Platform.OS === 'web' && hoverActionBtn === 'waga' && styles.actionBtnHover
           ]}
           onPress={() => setModalWaga(true)}
-          // Dodajemy obsługę hover dla web
           {...(Platform.OS === 'web' && {
             onMouseEnter: () => setHoverActionBtn('waga'),
             onMouseLeave: () => setHoverActionBtn(null)
@@ -199,7 +173,10 @@ export default function CategoryWeightManager() {
       </View>
       
       <ScrollView style={styles.scrollContainer}>
-        <View style={styles.kategorieBox}>
+        <View
+          style={styles.kategorieBox}
+          // REMOVE onLayout={handleKategorieBoxLayout}
+        >
           {kategorie.length === 0 ? (
             <View style={styles.emptyState}>
               <AntDesign name="folderopen" size={32} color={colors.textSecondary} />
@@ -211,38 +188,39 @@ export default function CategoryWeightManager() {
                 key={k.nazwa}
                 style={[
                   styles.kategoriaTile,
+                  // REMOVE getTileStyle(),
                   deletingKategoria === k.nazwa && styles.deletingKategoria,
-                  isSmallDevice && { width: '100%', flexBasis: 'auto' },
-                  // Styl hover dla web
                   Platform.OS === 'web' && hoverKategoria === k.nazwa && styles.kategoriaTileHover
                 ]}
-                // Dodajemy obsługę hover dla web
                 {...(Platform.OS === 'web' && {
                   onMouseEnter: () => setHoverKategoria(k.nazwa),
                   onMouseLeave: () => setHoverKategoria(null)
                 })}
               >
                 <View style={styles.kategoriaHeader}>
-                  {/* Kontener na tytuł i licznik */}
                   <View style={styles.kategoriaTitleContainer}>
-                    <Text style={styles.kategoriaTitle}>{k.nazwa}</Text>
-                    {k.wagi?.length > 0 && (
-                      <View style={styles.wagiCounter}>
-                        <Text style={styles.wagiCounterText}>{k.wagi.length}</Text>
-                      </View>
-                    )}
+                    <Text style={styles.kategoriaTitle} numberOfLines={2} ellipsizeMode="tail">{k.nazwa}</Text>
+                    {(() => {
+                      const athletesInCategory = zawodnicy.filter(z => z.kategoria === k.nazwa).length;
+                      if (athletesInCategory > 0) {
+                        return (
+                          <View style={styles.wagiCounter}>
+                            <FontAwesome name="users" size={styles.wagiCounterIcon.fontSize} color={styles.wagiCounterIcon.color} style={styles.wagiCounterIcon} />
+                            <Text style={styles.wagiCounterText}>{athletesInCategory}</Text>
+                          </View>
+                        );
+                      }
+                      return null; 
+                    })()}
                   </View>
 
-                  {/* Przycisk usuwania kategorii */}
                   <TouchableOpacity
                     style={[
                       styles.wagaDeleteBtn,
-                      // Styl hover dla web
                       Platform.OS === 'web' && hoverDeleteBtn === `kat-${k.nazwa}` && styles.deleteBtnHover
                     ]}
                     onPress={() => setConfirmModal({ open: true, type: 'kategoria', kategoria: k.nazwa })}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Dobra praktyka dla małych przycisków
-                    // Dodajemy obsługę hover dla web
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} 
                     {...(Platform.OS === 'web' && {
                       onMouseEnter: () => setHoverDeleteBtn(`kat-${k.nazwa}`),
                       onMouseLeave: () => setHoverDeleteBtn(null)
@@ -261,7 +239,6 @@ export default function CategoryWeightManager() {
                           <TouchableOpacity 
                             style={[
                               styles.wagaDeleteBtn,
-                              // Styl hover dla web
                               Platform.OS === 'web' && hoverDeleteBtn === `waga-${k.nazwa}-${w}` && styles.deleteBtnHover
                             ]}
                             onPress={() => setConfirmModal({ 
@@ -270,7 +247,6 @@ export default function CategoryWeightManager() {
                               kategoria: k.nazwa, 
                               waga: w 
                             })}
-                            // Dodajemy obsługę hover dla web
                             {...(Platform.OS === 'web' && {
                               onMouseEnter: () => setHoverDeleteBtn(`waga-${k.nazwa}-${w}`),
                               onMouseLeave: () => setHoverDeleteBtn(null)
@@ -291,13 +267,11 @@ export default function CategoryWeightManager() {
         </View>
       </ScrollView>
       
-      {/* Modal dodawania kategorii */}
       <Modal visible={modalKategoria} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            {/* Dodajemy ikonę obok tytułu */}
             <View style={styles.modalIconHeader}>
-              <AntDesign name="appstore-add" size={28} color={colors.accent} /> {/* Zmieniona ikona */}
+              <MaterialCommunityIcons name="plus-box-outline" size={32} color={colors.accent} />
             </View>
             <Text style={styles.modalTitle}>Nowa kategoria</Text>
             
@@ -330,11 +304,9 @@ export default function CategoryWeightManager() {
         </View>
       </Modal>
       
-      {/* Modal dodawania wagi */}
       <Modal visible={modalWaga} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={styles.modalCard}>
-            {/* Dodajemy ikonę obok tytułu */}
             <View style={styles.modalIconHeader}>
               <AntDesign name="tagso" size={28} color={colors.accent} /> {/* Zmieniona ikona */}
             </View>
@@ -347,7 +319,6 @@ export default function CategoryWeightManager() {
               ) : (
                 <>
                   <Text style={styles.selectLabel}>Wybierz kategorię:</Text>
-                  {/* Zmieniamy ScrollView na View i stosujemy nowy styl */}
                   <ScrollView style={{ maxHeight: 150 }}> {/* Dodajemy ScrollView wokół View, jeśli chcemy przewijać nadmiar */}
                     <View style={styles.selectItemsContainer}>
                       {kategorie.map(k => (
@@ -403,11 +374,9 @@ export default function CategoryWeightManager() {
         </View>
       </Modal>
       
-      {/* Modal potwierdzenia usunięcia */}
       <Modal visible={confirmModal.open} transparent animationType="fade">
         <View style={styles.modalBg}>
           <View style={[styles.modalCard, styles.confirmModalCard]}>
-            {/* Ikona ostrzeżenia już jest, upewnijmy się, że jest poprawna */}
             <View style={styles.modalIconHeader}>
               <AntDesign name="warning" size={32} color={colors.warning} />
             </View>
@@ -449,10 +418,8 @@ export default function CategoryWeightManager() {
         </View>
       </Modal>
       
-      {/* Powiadomienie */}
       {notif && (
         <View style={[
-
           styles.notification, 
           notif.type === 'success' ? styles.notifSuccess : styles.notifError
         ]}>

@@ -1,10 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react'; // Dodaj useEffect jeśli go nie ma
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Modal, Animated, Platform, TextInput, TouchableWithoutFeedback } from 'react-native';
+// Corrected/verified imports for theme and commonStyles
 import { colors, font, spacing, borderRadius, shadows, componentStyles } from '../../theme/theme';
-import { useCompetitionStore } from '../../store/useCompetitionStore';
+import { commonStyles } from '../../theme/common'; // Path should be correct
+import  useCompetitionStore  from '../../store/useCompetitionStore';
 import { AntDesign } from '@expo/vector-icons';
 import { saveAppData } from '../../utils/api';
-import styles from '../../styles/RegistrationStyles/CategoryBrowser.styles'; // Upewnij się, że importujesz style
+import styles from '../../styles/RegistrationStyles/CategoryBrowser.styles'; // Import local styles
 
 export default function CategoryBrowser() {
   const kategorie = useCompetitionStore(state => state.kategorie);
@@ -56,11 +58,9 @@ export default function CategoryBrowser() {
   const syncData = async () => {
     try {
       const currentState = useCompetitionStore.getState();
-      await saveAppData({
-        zawody: currentState.zawody,
-        kategorie: currentState.kategorie,
-        zawodnicy: currentState.zawodnicy,
-      });
+      // Usuń socket i attemptResultForAnimation przed wysłaniem, jeśli istnieją
+      const { socket, attemptResultForAnimation, ...dataToSend } = currentState;
+      await saveAppData(dataToSend);
       // Nie pokazuj notyfikacji o synchronizacji tutaj, tylko po udanej akcji
     } catch (error) {
       console.error('Błąd synchronizacji:', error);
@@ -108,23 +108,26 @@ export default function CategoryBrowser() {
             'Podejście II': editModal.data.podejscie2,
             'Podejście III': editModal.data.podejscie3,
         };
+
         for (const [fieldName, value] of Object.entries(fieldsToCheck)) {
-            if (value && isNaN(Number(value))) {
+            if (value && value.trim() !== '' && isNaN(Number(value.trim().replace(',', '.')))) {
                 showNotif(`${fieldName} musi być liczbą!`, 'error');
                 return;
             }
         }
+        const parseWeight = (val) => val?.trim().replace(',', '.') || '';
 
-        // Przygotuj dane do aktualizacji
         const dataToUpdate = {
             imie: editModal.data.imie.trim(),
             nazwisko: editModal.data.nazwisko.trim(),
             klub: editModal.data.klub?.trim() || '',
-            wiek: editModal.data.wiek.trim(),
-            plec: editModal.data.plec,
-            podejscie1: editModal.data.podejscie1?.trim() || '',
-            podejscie2: editModal.data.podejscie2?.trim() || '', // <-- Dodano podejście 2
-            podejscie3: editModal.data.podejscie3?.trim() || '', // <-- Dodano podejście 3
+            plec: editModal.data.plec, // Płeć z modala
+            kategoria: editModal.data.kategoria, // Kategoria i waga są zachowywane, nie edytowane w tym modalu
+            waga: editModal.data.waga,
+            wiek: editModal.data.wiek.trim(), // Wiek z modala
+            podejscie1: parseWeight(editModal.data.podejscie1),
+            podejscie2: parseWeight(editModal.data.podejscie2),
+            podejscie3: parseWeight(editModal.data.podejscie3),
         };
 
         updateZawodnik(editModal.idx, dataToUpdate);
@@ -146,7 +149,6 @@ export default function CategoryBrowser() {
 
   const weights = kategorie.find(k => k.nazwa === selectedCategory)?.wagi || [];
   const filteredZawodnicy = zawodnicy
-    .map((z, idx) => ({ ...z, originalIndex: idx }))
     .filter(z =>
       z.kategoria === selectedCategory && z.waga === selectedWeight
     );
@@ -156,28 +158,51 @@ export default function CategoryBrowser() {
     setFadeAnims(filteredZawodnicy.map(() => new Animated.Value(0)));
     filteredZawodnicy.forEach((_, i) => {
       Animated.timing(
-        fadeAnims[i] || new Animated.Value(0),
-        { toValue: 1, duration: 500, useNativeDriver: true }
+        fadeAnims[i] || new Animated.Value(0), // Fallback if fadeAnims[i] is undefined
+        { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' } 
       ).start();
     });
     // eslint-disable-next-line
   }, [filteredZawodnicy.length]);
 
+  // Logowanie przed renderowaniem listy
+  if (filteredZawodnicy.length > 0) {
+    console.log(
+      `[CategoryBrowser] Rendering list for category: "${selectedCategory}", weight: "${selectedWeight}"`
+    );
+    console.log(
+      '[CategoryBrowser] Filtered Zawodnicy Original Indexes:',
+      filteredZawodnicy.map(z => ({ originalIndex: z.originalIndex, imie: z.imie, nazwisko: z.nazwisko }))
+    );
+    // Sprawdzenie duplikatów
+    const originalIndexes = filteredZawodnicy.map(z => z.originalIndex);
+    const uniqueOriginalIndexes = new Set(originalIndexes);
+    if (originalIndexes.length !== uniqueOriginalIndexes.size) {
+      console.warn('[CategoryBrowser] DUPLICATE originalIndex values found in filteredZawodnicy!');
+      const counts = {};
+      originalIndexes.forEach(index => { counts[index] = (counts[index] || 0) + 1; });
+      const duplicates = Object.entries(counts).filter(([key, value]) => value > 1);
+      console.warn('[CategoryBrowser] Duplicate details:', duplicates);
+    }
+  }
+
+
   return (
     <View style={styles.browserContainer}>
-      <Text style={styles.browserTitle}>Przeglądaj i edytuj listy zawodników</Text>
+      <Text style={styles.browserTitle}>Przeglądaj i edytuj zawodników</Text>
 
-      {/* Wiersz wyboru kategorii i wagi - DODANO ETYKIETY */}
+      {/* Wiersz wyboru kategorii i wagi */}
       <View style={styles.selectionRow}>
         {/* Kolumna dla wyboru kategorii */}
         <View style={styles.selectionColumn}>
           <Text style={styles.selectionLabel}>Kategoria:</Text>
           <TouchableOpacity style={styles.selectButton} onPress={() => setCategoryModalVisible(true)}>
-            <AntDesign name="appstore-o" size={16} color={colors.primary} style={styles.selectIcon} />
+            {/* Ikona, Tekst przycisku, Ikona strzałki */}
+            <AntDesign name="appstore-o" size={16} color={colors.textLight} style={styles.selectIcon} />
             <Text style={styles.selectButtonText} numberOfLines={1}>
               {selectedCategory || 'Wybierz'}
             </Text>
-            <AntDesign name="down" size={12} color={colors.textSecondary} />
+            <AntDesign name="down" size={12} color={colors.textLight} />
           </TouchableOpacity>
         </View>
 
@@ -189,11 +214,12 @@ export default function CategoryBrowser() {
             onPress={() => selectedCategory && setWeightModalVisible(true)}
             disabled={!selectedCategory}
           >
-            <AntDesign name="tago" size={16} color={selectedCategory ? colors.primary : colors.textSecondary} style={styles.selectIcon} />
+            {/* Ikona, Tekst przycisku, Ikona strzałki */}
+            <AntDesign name="tago" size={16} color={selectedCategory ? colors.textLight : colors.textSecondary} style={styles.selectIcon} />
             <Text style={[styles.selectButtonText, !selectedCategory && styles.selectButtonTextDisabled]} numberOfLines={1}>
               {selectedWeight || 'Wybierz'}
             </Text>
-            <AntDesign name="down" size={12} color={colors.textSecondary} />
+            <AntDesign name="down" size={12} color={selectedCategory ? colors.textLight : colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -318,12 +344,11 @@ export default function CategoryBrowser() {
             {/* ZMIANA: Struktura listy na wzór CWM */}
             <ScrollView style={{ maxHeight: 150, width: '100%' }}>
               <View style={styles.selectItemsContainer}>
-                {kategorie.map((cat) => (
+                {kategorie.map((cat, index) => (
                   <TouchableOpacity
-                    key={cat.nazwa}
+                    key={cat.nazwa || `kat-${index}`} // Użyj kat.nazwa lub unikalnego ID, jeśli dostępne, fallback na index
                     style={[
                       styles.selectItem, // Używamy stylu pigułki
-                      // Brak stylu 'active' bo wybór zamyka modal
                       Platform.OS === 'web' && hoverSelectItem === `kat-${cat.nazwa}` && styles.selectItemHover,
                     ]}
                     activeOpacity={0.8} // Efekt wciśnięcia
@@ -336,7 +361,10 @@ export default function CategoryBrowser() {
                       onMouseLeave: () => setHoverSelectItem(null)
                     })}
                   >
-                    <Text style={styles.selectItemText}>{cat.nazwa}</Text>
+                    <Text style={[
+                      styles.selectItemText,
+                      Platform.OS === 'web' && hoverSelectItem === `kat-${cat.nazwa}` && styles.selectItemTextActive
+                    ]}>{cat.nazwa}</Text>
                   </TouchableOpacity>
                 ))}
                 {kategorie.length === 0 && (
@@ -361,12 +389,11 @@ export default function CategoryBrowser() {
             {/* ZMIANA: Struktura listy na wzór CWM */}
             <ScrollView style={{ maxHeight: 150, width: '100%' }}>
               <View style={styles.selectItemsContainer}>
-                {weights.map((w) => (
+                {weights.map((w, wagaIndex) => (
                   <TouchableOpacity
-                    key={w}
+                    key={`${selectedCategory}-waga-${wagaIndex}`} // Zbuduj bardziej unikalny klucz
                     style={[
                       styles.selectItem, // Używamy stylu pigułki
-                      // Brak stylu 'active' bo wybór zamyka modal
                       Platform.OS === 'web' && hoverSelectItem === `waga-${w}` && styles.selectItemHover,
                     ]}
                     activeOpacity={0.8} // Efekt wciśnięcia
@@ -379,7 +406,10 @@ export default function CategoryBrowser() {
                       onMouseLeave: () => setHoverSelectItem(null)
                     })}
                   >
-                    <Text style={styles.selectItemText}>{w}</Text>
+                    <Text style={[
+                      styles.selectItemText,
+                      Platform.OS === 'web' && hoverSelectItem === `waga-${w}` && styles.selectItemTextActive
+                    ]}>{w}</Text>
                   </TouchableOpacity>
                 ))}
                 {weights.length === 0 && (
@@ -433,125 +463,111 @@ export default function CategoryBrowser() {
 
       {/* --- POCZĄTEK ZMIANY: Modal Edycji z zatrzymaniem propagacji na karcie --- */}
       <Modal visible={editModal.open} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={closeEditModal}>
-          <View style={styles.modalBg}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.modalCard}>
-                <View style={styles.modalIconHeader}>
-                  <AntDesign name="edit" size={28} color={colors.primary} />
-                </View>
-                <Text style={styles.modalTitle}>Edytuj zawodnika</Text>
-
-                <ScrollView style={{ width: '100%', maxHeight: '70vh' }}>
-                    {/* Usuwamy onTouchStart i onMouseDown z TextInputów, bo nie są już potrzebne */}
-                    <Text style={styles.modalLabel}>Imię</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Podaj imię"
-                      value={editModal.data.imie || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, imie: val } }))}
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={styles.modalLabel}>Nazwisko</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Podaj nazwisko"
-                      value={editModal.data.nazwisko || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, nazwisko: val } }))}
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    {/* ... pozostałe TextInputy (Klub, Wiek, Podejścia) - również usuń z nich onMouseDown ... */}
-                    <Text style={styles.modalLabel}>Klub</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Podaj klub (opcjonalnie)"
-                      value={editModal.data.klub || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, klub: val } }))}
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={styles.modalLabel}>Wiek</Text>
-                     <TextInput
-                      style={styles.modalInput}
-                      placeholder="Podaj wiek"
-                      value={editModal.data.wiek || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, wiek: val } }))}
-                      keyboardType="numeric"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={styles.modalLabel}>Płeć</Text>
-                     <View style={styles.modalRadioContainer}>
-                       <TouchableOpacity
-                         style={[styles.modalRadioBtn, editModal.data.plec === 'K' && styles.modalRadioBtnActive]}
-                         onPress={() => setEditModal(m => ({ ...m, data: { ...m.data, plec: 'K' } }))}
-                       >
-                         <Text style={[styles.modalRadioText, editModal.data.plec === 'K' && styles.modalRadioTextActive]}>Kobieta</Text>
-                       </TouchableOpacity>
-                       <TouchableOpacity
-                         style={[styles.modalRadioBtn, editModal.data.plec === 'M' && styles.modalRadioBtnActive]}
-                         onPress={() => setEditModal(m => ({ ...m, data: { ...m.data, plec: 'M' } }))}
-                       >
-                         <Text style={[styles.modalRadioText, editModal.data.plec === 'M' && styles.modalRadioTextActive]}>Mężczyzna</Text>
-                       </TouchableOpacity>
-                     </View>
-
-                    <Text style={styles.modalLabel}>Podejście I (kg)</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Wprowadź wagę"
-                      value={editModal.data.podejscie1 || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie1: val } }))}
-                      keyboardType="numeric"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={styles.modalLabel}>Podejście II (kg)</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Wprowadź wagę (opcjonalnie)"
-                      value={editModal.data.podejscie2 || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie2: val } }))}
-                      keyboardType="numeric"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-
-                    <Text style={styles.modalLabel}>Podejście III (kg)</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="Wprowadź wagę (opcjonalnie)"
-                      value={editModal.data.podejscie3 || ''}
-                      onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie3: val } }))}
-                      keyboardType="numeric"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-                </ScrollView>
-
-                {/* Przyciski Akcji Modala */}
-                <View style={styles.modalBtns}>
-                   <TouchableOpacity
-                     style={[styles.modalBtnBase, styles.modalCancelBtn]}
-                     onPress={closeEditModal} // Zamyka modal
-                     activeOpacity={0.7}
-                   >
-                     <AntDesign name="close" size={16} color={colors.textSecondary} style={styles.modalBtnIcon} />
-                     <Text style={styles.modalCancelBtnText}>Anuluj</Text>
-                   </TouchableOpacity>
-                   <TouchableOpacity
-                     style={[styles.modalBtnBase, styles.modalConfirmBtn]}
-                     onPress={handleSaveEdit}
-                     activeOpacity={0.7}
-                   >
-                     <AntDesign name="save" size={16} color={colors.textLight} style={styles.modalBtnIcon} />
-                     <Text style={styles.modalBtnText}>Zapisz</Text>
-                   </TouchableOpacity>
-                </View>
+        <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={closeEditModal}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalCard}>
+              <View style={styles.modalIconHeader}>
+                <AntDesign name="edit" size={28} color={colors.accent} />
               </View>
-            </TouchableWithoutFeedback>
-          </View>
-        </TouchableWithoutFeedback>
+              <Text style={styles.modalTitle}>Edytuj Zawodnika</Text>
+              <ScrollView style={{ width: '100%', maxHeight: Platform.OS === 'web' ? '70vh' : 500 }} contentContainerStyle={{paddingBottom: 20}}>
+                <Text style={styles.modalLabel}>Imię</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Podaj imię"
+                  value={editModal.data.imie || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, imie: val } }))}
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Nazwisko</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Podaj nazwisko"
+                  value={editModal.data.nazwisko || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, nazwisko: val } }))}
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Klub</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Podaj klub (opcjonalnie)"
+                  value={editModal.data.klub || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, klub: val } }))}
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Wiek</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Podaj wiek"
+                  value={editModal.data.wiek || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, wiek: val } }))}
+                  keyboardType="numeric"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Płeć</Text>
+                <View style={styles.modalRadioContainer}>
+                  <TouchableOpacity
+                    style={[styles.modalRadioBtn, editModal.data.plec === 'K' && styles.modalRadioBtnActive]}
+                    onPress={() => setEditModal(m => ({ ...m, data: { ...m.data, plec: 'K' } }))}
+                  >
+                    <Text style={[styles.modalRadioText, editModal.data.plec === 'K' && styles.modalRadioTextActive]}>Kobieta</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalRadioBtn, editModal.data.plec === 'M' && styles.modalRadioBtnActive]}
+                    onPress={() => setEditModal(m => ({ ...m, data: { ...m.data, plec: 'M' } }))}
+                  >
+                    <Text style={[styles.modalRadioText, editModal.data.plec === 'M' && styles.modalRadioTextActive]}>Mężczyzna</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.modalLabel}>Podejście I (kg)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Wprowadź wagę (opcjonalnie)"
+                  value={editModal.data.podejscie1 || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie1: val } }))}
+                  keyboardType="numeric"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Podejście II (kg)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Wprowadź wagę (opcjonalnie)"
+                  value={editModal.data.podejscie2 || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie2: val } }))}
+                  keyboardType="numeric"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.modalLabel}>Podejście III (kg)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Wprowadź wagę (opcjonalnie)"
+                  value={editModal.data.podejscie3 || ''}
+                  onChangeText={val => setEditModal(m => ({ ...m, data: { ...m.data, podejscie3: val } }))}
+                  keyboardType="numeric"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </ScrollView>
+
+              <View style={styles.modalBtns}>
+                <TouchableOpacity style={[styles.modalBtnBase, styles.modalCancelBtn]} onPress={closeEditModal}>
+                  <AntDesign name="close" size={16} color={colors.textLight} style={styles.modalBtnIcon} />
+                  <Text style={styles.modalCancelBtnText}>Anuluj</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtnBase, styles.modalConfirmBtn]} onPress={handleSaveEdit}>
+                  <AntDesign name="save" size={16} color={colors.textLight} style={styles.modalBtnIcon} />
+                  <Text style={styles.modalBtnText}>Zapisz</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
       {/* --- KONIEC ZMIANY --- */}
 

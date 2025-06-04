@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react'; // Dodaj useRef
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions, Image, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import CompetitionInfoForm from '../components/registration/CompetitionInfoForm';
-import CategoryWeightManager from '../components/registration/CategoryWeightManager';
 import AthleteRegistrationForm from '../components/registration/AthleteRegistrationForm';
+import CategoryWeightManager from '../components/registration/CategoryWeightManager';
 import CategoryBrowser from '../components/registration/CategoryBrowser';
 import CompetitionSummary from '../components/registration/CompetitionSummary';
 import NavBar from '../components/navigation/NavBar';
-import Footer from '../components/navigation/Footer'; // Upewnij się, że import jest
-import { commonStyles } from '../theme/common';
+import Footer from '../components/navigation/Footer';
+// Corrected/verified imports for theme and commonStyles
 import { colors, font, spacing, borderRadius, shadows, componentStyles } from '../theme/theme';
-import { useCompetitionStore } from '../store/useCompetitionStore';
+import { commonStyles } from '../theme/common'; // Ensure this path is correct relative to RegistrationScreen.js
+import  useCompetitionStore  from '../store/useCompetitionStore';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export default function RegistrationScreen() {
@@ -18,33 +19,30 @@ export default function RegistrationScreen() {
   const zawody = useCompetitionStore(state => state.zawody);
   const { width } = useWindowDimensions();
 
-  // Zainicjalizuj domyślnie na true (formularz widoczny)
   const [isInfoFormVisible, setIsInfoFormVisible] = useState(true);
   const [headerKlubAvatarDimensions, setHeaderKlubAvatarDimensions] = useState(null);
   const [headerJudgeAvatarDimensions, setHeaderJudgeAvatarDimensions] = useState({ width: 32, height: 32 });
-  // Ref do śledzenia, czy początkowe sprawdzenie widoczności zostało wykonane
   const initialVisibilityCheckDone = useRef(false);
 
-  // useEffect do ustawienia początkowej widoczności formularza po załadowaniu danych
   useEffect(() => {
-    // Sprawdź, czy obiekt 'zawody' istnieje, ma jakąś nazwę (sygnał załadowania danych)
-    // i czy początkowe sprawdzenie nie zostało jeszcze wykonane.
-    // Sprawdzamy `zawody.nazwa !== undefined`, aby upewnić się, że obiekt został załadowany
-    // (domyślny stan może nie mieć klucza 'nazwa' lub mieć go jako pusty string).
     if (zawody && zawody.nazwa !== undefined && !initialVisibilityCheckDone.current) {
       const isDataComplete = !!(zawody.nazwa && zawody.miejsce && zawody.sedzia?.imie && zawody.sedzia?.nazwisko);
-
-      // Jeśli dane są kompletne, ukryj formularz
       if (isDataComplete) {
         setIsInfoFormVisible(false);
       }
-      // Oznacz, że początkowe sprawdzenie zostało wykonane, aby ten blok nie uruchomił się ponownie automatycznie
       initialVisibilityCheckDone.current = true;
     }
-    // Ten efekt powinien reagować na zmiany w 'zawody', aby zadziałał po załadowaniu danych
   }, [zawody]);
 
-  // Pozostałe useEffect dla wymiarów avatarów (bez zmian)
+  // Funkcja do przełączania widoczności formularza informacji o zawodach
+  const handleToggleInfoForm = () => {
+    setIsInfoFormVisible(prev => !prev);
+  };
+
+  const handleSaveInfoSuccess = () => {
+    setIsInfoFormVisible(false); // Ukryj formularz po pomyślnym zapisie
+  };
+
   useEffect(() => {
     if (zawody.klubAvatar) {
       Image.getSize(zawody.klubAvatar, (width, height) => {
@@ -62,10 +60,7 @@ export default function RegistrationScreen() {
           displayWidth = displayHeight * aspectRatio;
         }
         setHeaderKlubAvatarDimensions({ width: displayWidth, height: displayHeight });
-      }, (error) => {
-        console.error('Błąd pobierania rozmiaru obrazu dla nagłówka:', error);
-        setHeaderKlubAvatarDimensions(null);
-      });
+      }, () => setHeaderKlubAvatarDimensions(null));
     } else {
       setHeaderKlubAvatarDimensions(null);
     }
@@ -88,63 +83,11 @@ export default function RegistrationScreen() {
           displayWidth = displayHeight * aspectRatio;
         }
         setHeaderJudgeAvatarDimensions({ width: displayWidth, height: displayHeight });
-      }, (error) => {
-        console.error('Błąd pobierania rozmiaru avatara sędziego:', error);
-        setHeaderJudgeAvatarDimensions(null);
-      });
+      }, () => setHeaderJudgeAvatarDimensions(null));
     } else {
       setHeaderJudgeAvatarDimensions(null);
     }
   }, [zawody.sedzia?.avatar]);
-
-
-  // Funkcje obsługi pozostają bez zmian
-  const handleInfoSaveSuccess = () => {
-    setIsInfoFormVisible(false);
-    // Nie resetujemy tutaj initialVisibilityCheckDone.current, bo zapis oznacza, że dane są kompletne.
-  };
-
-  const handleEditInfoRequest = () => {
-    setIsInfoFormVisible(true);
-    // Ustawiamy flagę z powrotem na true, aby useEffect nie ukrył formularza od razu po zmianie 'zawody' (jeśli by zaszła)
-    // Chociaż przy obecnej logice useEffect (sprawdza tylko raz), to nie jest ściśle konieczne, ale dla bezpieczeństwa:
-    // initialVisibilityCheckDone.current = false; // Można rozważyć, ale może powodować problemy, jeśli dane się odświeżą w tle. Lepiej zostawić true.
-  };
-
-  // ... reszta komponentu (renderDynamicContent, return, style) bez zmian ...
-  const renderDynamicContent = () => {
-    return (
-      <>
-        {isInfoFormVisible && (
-          <View style={styles.fullWidthBox}>
-            <CompetitionInfoForm onSaveSuccess={handleInfoSaveSuccess} />
-          </View>
-        )}
-        <View style={styles.mainRow}>
-          <View style={styles.displayColumn}>
-            <View style={commonStyles.card}>
-              <CompetitionSummary
-                onEditInfoRequest={handleEditInfoRequest}
-                isInfoFormVisible={isInfoFormVisible}
-              />
-            </View>
-            <View style={commonStyles.card}>
-              <CategoryBrowser />
-            </View>
-          </View>
-          <View style={styles.inputColumn}>
-            <View style={commonStyles.card}>
-              <CategoryWeightManager />
-            </View>
-            <View style={commonStyles.card}>
-              <Text style={styles.sectionTitle}>Zarejestruj zawodnika</Text>
-              <AthleteRegistrationForm />
-            </View>
-          </View>
-        </View>
-      </>
-    );
-  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
@@ -153,6 +96,7 @@ export default function RegistrationScreen() {
         style={styles.headerBackground}
       >
         <View style={styles.headerBar}>
+          {/* Lewa strona nagłówka (logo klubu, miejsce, data) */}
           <View style={styles.headerSideContainer}>
             {zawody.klubAvatar && headerKlubAvatarDimensions ? (
               <Image
@@ -165,7 +109,9 @@ export default function RegistrationScreen() {
               <Text style={styles.headerDateText}>{zawody.data}</Text>
             </View>
           </View>
+          {/* Środek nagłówka */}
           <Text style={styles.headerLogo}>{zawody.nazwa || 'Benchpress Cup 2025'}</Text>
+          {/* Prawa strona nagłówka (sędzia, avatar sędziego) */}
           <View style={[styles.headerSideContainer, styles.headerRightAlign]}>
             <View style={styles.headerJudgeInfo}>
               <Text style={styles.headerJudgeName}>{`${zawody.sedzia?.imie || ''} ${zawody.sedzia?.nazwisko || ''}`}</Text>
@@ -180,9 +126,33 @@ export default function RegistrationScreen() {
         </View>
         <NavBar navigation={navigation} />
       </LinearGradient>
+
       <View style={styles.mainContent}>
-        <View style={styles.dynamicContainer}>
-          {renderDynamicContent()}
+        {isInfoFormVisible && (
+          <View style={styles.card}>
+            <CompetitionInfoForm onSaveSuccess={handleSaveInfoSuccess} />
+          </View>
+        )}
+        <View style={styles.topRow}>
+          <View style={styles.topRowCol}>
+            <View style={styles.card}>
+              <AthleteRegistrationForm />
+            </View>
+          </View>
+          <View style={styles.topRowCol}>
+            <View style={styles.card}>
+              <CategoryWeightManager />
+            </View>
+          </View>
+        </View>
+        <View style={styles.card}>
+          <CategoryBrowser />
+        </View>
+        <View style={styles.summaryFullWidth}>
+          <CompetitionSummary 
+            onEditInfoRequest={handleToggleInfoForm} 
+            isInfoFormVisible={isInfoFormVisible} 
+          />
         </View>
       </View>
       <Footer />
@@ -190,7 +160,6 @@ export default function RegistrationScreen() {
   );
 }
 
-// Style bez zmian
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -200,15 +169,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   headerBackground: {
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.md,
-    ...shadows.medium,
+    paddingTop: spacing.xl, // Use theme variable
+    paddingBottom: spacing.md, // Use theme variable
+    ...shadows.medium, // Use theme variable
   },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: '5%',
+    paddingHorizontal: '5%', // Consider using spacing.lg or xl if '5%' is inconsistent
     paddingVertical: spacing.sm,
     width: '100%',
   },
@@ -223,14 +192,13 @@ const styles = StyleSheet.create({
   },
   headerClubLogo: {
     marginRight: spacing.sm,
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.sm, // Use theme variable
   },
   headerLocationDate: {},
   headerLocationText: {
-    fontSize: font.sizes.lg,
-    color: colors.textLight,
-    fontWeight: font.weights.semibold,
-    
+    fontSize: font.sizes.lg, // Use theme variable
+    color: colors.textLight, // Use theme variable
+    fontWeight: font.weights.semibold, // Use theme variable
   },
   headerDateText: {
     fontSize: font.sizes.lg,
@@ -241,12 +209,12 @@ const styles = StyleSheet.create({
     fontSize: font.sizes['3xl'],
     fontWeight: font.weights.extrabold,
     color: colors.textMainTitle,
-    fontFamily: font.family,
+    fontFamily: font.family, // Use theme variable
     letterSpacing: 1,
     textAlign: 'center',
     flex: 2,
     marginHorizontal: spacing.sm,
-    alligntItems: 'center',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   headerJudgeInfo: {
@@ -259,48 +227,51 @@ const styles = StyleSheet.create({
     fontWeight: font.weights.semibold,
   },
   headerJudgeAvatar: {
-    borderRadius: borderRadius.full,
+    borderRadius: borderRadius.sm,
     resizeMode: 'cover',
   },
   mainContent: {
     flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: borderRadius['2xl'],
-    borderTopRightRadius: borderRadius['2xl'],
-    marginTop: -borderRadius.xl,
-    paddingHorizontal: '5%',
+    borderTopLeftRadius: borderRadius['2xl'], // Use theme variable
+    borderTopRightRadius: borderRadius['2xl'], // Use theme variable
+    marginTop: -borderRadius.xl, // Use theme variable
+    paddingHorizontal: '5%', // Consider spacing.lg or xl
     paddingTop: spacing.xl,
   },
-  dynamicContainer: {
+  dynamicContainer: { // This style was in a previous version, ensure it's used if needed
     width: '100%',
     marginBottom: spacing.xl,
   },
-  fullWidthBox: {
+  fullWidthBox: { // This style was in a previous version, ensure it's used if needed
     width: '100%',
     marginBottom: spacing.xl,
   },
-  mainRow: {
+  topRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    width: '100%',
     gap: spacing.xl,
+    marginBottom: spacing.xl,
+    width: '100%',
   },
-  displayColumn: {
+  topRowCol: {
     flex: 1,
-    gap: spacing.lg,
+    minWidth: 0,
   },
-  inputColumn: {
-    flex: 1,
-    gap: spacing.lg,
-  },
-  card: {
+  card: { // This should be visually consistent with componentStyles.card
     backgroundColor: colors.surface,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     ...shadows.small,
+    marginBottom: spacing.lg,
   },
-  sectionTitle: {
-    ...componentStyles.componentTitle,
+  sectionTitle: { // Ensure this uses componentStyles.componentTitle or a similar shared style
+    ...componentStyles.componentTitle, // Example of using shared style
+    marginBottom: spacing.md,
+  },
+  summaryFullWidth: {
+    width: '100%',
+    marginTop: spacing.xl,
+    marginBottom: 0,
+    alignSelf: 'stretch',
   },
 });

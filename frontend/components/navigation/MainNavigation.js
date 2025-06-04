@@ -40,3 +40,9 @@ const Placeholder = ({ name }) => (
     <Text>Placeholder dla: {name}</Text>
   </View>
 );
+
+// Przykład przycisku nawigacji do ekranu pomostowego
+<Button
+  title="Ekran pomost"
+  onPress={() => navigation.navigate('PlatformScreen')} // <--- POPRAWIONA NAZWA EKRANU
+/>

@@ -1,232 +1,61 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, useWindowDimensions, ActivityIndicator, TextInput, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { View, Text, ScrollView, Alert, ActivityIndicator, Platform, Image, Modal, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-// --- START ZMIANY: Importuj store ---
-import { useCompetitionStore } from '../store/useCompetitionStore';
-// --- KONIEC ZMIANY ---
-import { saveAppData } from '../utils/api';
+import { useNavigation } from '@react-navigation/native';
+import { AntDesign, MaterialCommunityIcons } from '@expo/vector-icons';
+
+import useCompetitionStore from '../store/useCompetitionStore';
+import { saveAppData } from '../utils/api'; // Załóżmy, że syncData tego używa
+import { styles } from '../styles/CompetitionStyles/CompetitionScreen.styles';
+import { colors, spacing } from '../theme/theme'; // Dodano spacing
+
 import NavBar from '../components/navigation/NavBar';
-import Footer from '../components/navigation/Footer';
-import { colors, font, spacing, borderRadius, shadows } from '../theme/theme';
-import { AntDesign } from '@expo/vector-icons'; // Upewnij się, że jest importowane
+import OptionSelector from '../components/competition/OptionSelector';
+import AthleteList from '../components/competition/AthleteList';
+import CurrentAthleteManager from '../components/competition/CurrentAthleteManager';
+import TimerDisplay from '../components/competition/TimerDisplay';
+import AttemptResultAnimation from '../components/competition/AttemptResultAnimation';
+import Footer from '../components/competition/FooterComp'; // Upewnij się, że import jest poprawny
 
-// --- Funkcja pomocnicza do sprawdzania ukończenia zawodnika ---
-const hasAthleteCompleted = (athlete) => {
-  // Sprawdza, czy wszystkie trzy statusy podejść są ustawione (nie są null)
-  return !!(athlete.podejscie1Status && athlete.podejscie2Status && athlete.podejscie3Status);
-};
-// --- KONIEC ZMIANY ---
-
-// --- Komponenty pomocnicze (OptionSelector, AthleteList, CurrentAthleteManager, Timer) ---
-// Komponent do wyboru opcji (Kategoria, Waga)
-const OptionSelector = ({ label, options, selectedValue, onSelect, placeholder = "Wybierz...", loading = false }) => (
-    <View style={styles.selectorContainer}>
-        <Text style={styles.selectorLabel}>{label}:</Text>
-        {loading ? (
-            <ActivityIndicator size="small" color={colors.primary} style={styles.selectorLoading} />
-        ) : options.length === 0 ? (
-            <Text style={styles.selectorEmpty}>Brak opcji</Text>
-        ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.selectorScroll}>
-                {/* Placeholder */}
-                <TouchableOpacity
-                    key="placeholder"
-                    style={[styles.selectorOption, !selectedValue && styles.selectorOptionActive]}
-                    onPress={() => onSelect(null)}
-                    disabled={loading} // Wyłącz placeholder podczas ładowania
-                >
-                    <Text style={[styles.selectorOptionText, !selectedValue && styles.selectorOptionTextActive]}>
-                        {placeholder}
-                    </Text>
-                </TouchableOpacity>
-                {/* Mapowanie opcji */}
-                {options.map((option) => (
-                    <TouchableOpacity
-                        key={option.value}
-                        style={[
-                            styles.selectorOption,
-                            selectedValue === option.value && styles.selectorOptionActive,
-                            option.isCompleted && styles.selectorOptionCompleted // Styl dla ukończonej
-                        ]}
-                        onPress={() => !option.isCompleted && onSelect(option.value)} // Wywołaj onSelect tylko jeśli nieukończone
-                        disabled={option.isCompleted || loading} // Zablokuj ukończone lub podczas ładowania
-                    >
-                        <Text style={[
-                            styles.selectorOptionText,
-                            selectedValue === option.value && styles.selectorOptionTextActive,
-                            option.isCompleted && styles.selectorOptionTextCompleted // Styl tekstu ukończonej
-                        ]}>
-                            {option.label}
-                        </Text>
-                        {/* Ikona dla ukończonych */}
-                        {option.isCompleted && (
-                             <AntDesign name="check" size={12} color={colors.success} style={styles.selectorCompletedIcon} />
-                        )}
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
-        )}
-    </View>
-);
-
-// Komponent listy zawodników
-// --- POCZĄTEK ZMIANY: Modyfikacja AthleteList ---
-const AthleteList = ({ athletes, currentAthleteFilteredIndex, onSelectAthlete }) => (
-    <View style={styles.athleteListContainer}>
-        <Text style={styles.subHeader}>Zawodnicy w tej grupie:</Text>
-        {athletes.length === 0 ? (
-            <Text style={styles.emptyText}>Brak zawodników w tej kategorii/wadze.</Text>
-        ) : (
-            <ScrollView style={styles.athleteScroll}>
-                {athletes.map((athlete, index) => (
-                    <TouchableOpacity
-                        key={athlete.originalIndex}
-                        style={[
-                            styles.athleteListItem,
-                            index === currentAthleteFilteredIndex && styles.athleteListItemActive,
-                            athlete.isCompleted && styles.athleteListItemCompleted, // Styl dla ukończonego
-                        ]}
-                        onPress={() => onSelectAthlete(athlete.originalIndex)}
-                        // Opcjonalnie: Zablokuj wybór ukończonych
-                        // disabled={athlete.isCompleted}
-                    >
-                        {/* Dodatkowy View dla flexbox (tekst + ikona) */}
-                        <View style={styles.athleteListItemContent}>
-                            <Text style={[
-                                styles.athleteListText,
-                                athlete.isCompleted && styles.athleteListTextCompleted // Opcjonalny styl tekstu
-                            ]}>
-                                {index + 1}. {athlete.imie} {athlete.nazwisko} ({athlete.klub || 'brak klubu'})
-                                <Text style={styles.athleteListAttempt1}> [{athlete.podejscie1 || 'N/A'} kg]</Text>
-                            </Text>
-                            {/* Ikona галочки dla ukończonych */}
-                            {athlete.isCompleted && (
-                                <AntDesign name="checkcircle" size={18} color={colors.success} style={styles.completedIcon} />
-                            )}
-                        </View>
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
-        )}
-    </View>
-);
-// --- KONIEC ZMIANY ---
-
-// Komponent zarządzania aktualnym zawodnikiem
-const CurrentAthleteManager = ({ athlete, athleteOriginalIndex, currentAttemptNr, onAttemptStatusChange, onWeightChange, isSaving }) => {
-    // console.log(`[CurrentAthleteManager] Rendering with currentAttemptNr: ${currentAttemptNr}`); // LOG 4 - Można odkomentować w razie potrzeby
-    if (!athlete) {
-        return <Text style={styles.emptyText}>Wybierz zawodnika z listy.</Text>;
-    }
-
-    const getStatusIcon = (status) => {
-        if (status === 'passed') return <AntDesign name="checkcircle" size={24} color={colors.success} />;
-        if (status === 'failed') return <AntDesign name="closecircle" size={24} color={colors.error} />;
-        return <AntDesign name="clockcircleo" size={24} color={colors.textSecondary} />;
-    };
-
-    const handleWeightInput = (nr, text) => {
-        const numericValue = text.replace(/[^0-9]/g, '');
-        onWeightChange(athleteOriginalIndex, nr, numericValue);
-    };
-
-    return (
-        <View style={styles.currentAthleteContainer}>
-            <Text style={styles.currentAthleteName}>{athlete.imie} {athlete.nazwisko}</Text>
-            <Text style={styles.currentAthleteClub}>{athlete.klub || 'brak klubu'}</Text>
-            <View style={styles.attemptsContainer}>
-                {[1, 2, 3].map((nr) => {
-                    const weight = athlete[`podejscie${nr}`];
-                    const status = athlete[`podejscie${nr}Status`];
-                    const isCurrent = currentAttemptNr === nr;
-                    const isEditable = !status && nr >= currentAttemptNr;
-
-                    return (
-                        <View key={nr} style={[styles.attemptBox, isCurrent && styles.attemptBoxActive]}>
-                            <Text style={styles.attemptLabel}>Podejście {nr}</Text>
-                            {isEditable ? (
-                                <TextInput
-                                    style={styles.attemptWeightInput}
-                                    value={String(weight || '')} // Upewnij się, że value jest stringiem
-                                    onChangeText={(text) => handleWeightInput(nr, text)}
-                                    keyboardType="numeric"
-                                    placeholder="kg"
-                                    editable={!isSaving}
-                                />
-                            ) : (
-                                <Text style={styles.attemptWeight}>{weight ? `${weight} kg` : '-'}</Text>
-                            )}
-                            <View style={styles.attemptStatusIcon}>{getStatusIcon(status)}</View>
-                            {isCurrent && !status && (
-                                <View style={styles.attemptActions}>
-                                    <TouchableOpacity
-                                        style={[styles.actionButton, styles.passButton, isSaving && styles.actionButtonDisabled]}
-                                        onPress={() => !isSaving && onAttemptStatusChange(athleteOriginalIndex, nr, 'passed')}
-                                        disabled={isSaving}
-                                    >
-                                        {isSaving ? <ActivityIndicator size="small" color={colors.textLight} /> : <Text style={styles.actionButtonText}>Zalicz</Text>}
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        style={[styles.actionButton, styles.failButton, isSaving && styles.actionButtonDisabled]}
-                                        onPress={() => !isSaving && onAttemptStatusChange(athleteOriginalIndex, nr, 'failed')}
-                                        disabled={isSaving}
-                                    >
-                                        {isSaving ? <ActivityIndicator size="small" color={colors.textLight} /> : <Text style={styles.actionButtonText}>Spal</Text>}
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </View>
-                    );
-                })}
-            </View>
-        </View>
-    );
+// Helper functions (zakładam, że są zdefiniowane gdzieś lub poniżej)
+const getAthleteDeclaredWeightForRound = (athlete, round) => {
+    if (!athlete) return 0;
+    const weightStr = athlete[`podejscie${round}`];
+    return parseFloat(String(weightStr).replace(',', '.')) || 0;
 };
 
-// Komponent Timera - teraz pobiera czas i stan ze store'u
-const Timer = ({ isActive, timeLeft }) => {
-    const formatTime = (seconds) => {
-        // --- START CHANGE: Handle invalid input ---
-        if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
-            console.warn(`[Timer formatTime] Invalid seconds value: ${seconds}. Returning '00:00'.`);
-            return '00:00'; // Zwróć domyślną wartość zamiast NaN:NaN
-        }
-        // --- END CHANGE ---
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-    };
-
-    return (
-        <View style={styles.timerContainer}>
-            <Text style={[
-                styles.timerText,
-                // Stosuj style ostrzeżenia/zakończenia tylko dla poprawnych wartości czasu
-                isActive && typeof timeLeft === 'number' && !isNaN(timeLeft) && timeLeft <= 10 && timeLeft > 0 && styles.timerWarning,
-                isActive && typeof timeLeft === 'number' && !isNaN(timeLeft) && timeLeft === 0 && styles.timerFinished
-            ]}>
-                {/* Pokaż sformatowany czas tylko jeśli timer jest aktywny i czas jest poprawny */}
-                {isActive && typeof timeLeft === 'number' && !isNaN(timeLeft) ? formatTime(timeLeft) : '--:--'}
-            </Text>
-        </View>
-    );
+const hasAthleteCompletedAttemptInRound = (athlete, round) => {
+    if (!athlete) return false;
+    return !!athlete[`podejscie${round}Status`];
 };
 
+const hasAthleteCompletedAllAttempts = (athlete) => {
+    if (!athlete) return false;
+    return !!(athlete.podejscie1Status && athlete.podejscie2Status && athlete.podejscie3Status);
+};
 
-// --- Główny komponent ekranu ---
+const MAX_TIMER_SECONDS = 60;
+
+// --- NOWE STAŁE CZASOWE ---
+const ANIMATION_DURATION = 2000; // Czas trwania animacji na ekranie widowni
+const TEMP_RESULTS_DISPLAY_DURATION = 5000; // Czas wyświetlania tymczasowych wyników
 
 export default function CompetitionScreen() {
   const navigation = useNavigation();
-  // Pobieranie stanu i akcji ze store'u
   const {
     zawody, kategorie, zawodnicy,
-    activeCategory, activeWeight, activeAthleteOriginalIndex, activeAttemptNr, timerActive, timerTimeLeft,
-    updatePodejscieStatus, updatePodejscieWaga, setInitialData,
-    setActiveGroup, setActiveAthlete, setActiveAttemptNr, setTimerActive, setTimerTimeLeft,
-    // --- START ZMIANY: Pobierz socket ze store ---
-    socket
-    // --- KONIEC ZMIANY ---
+    activeCategory, activeWeight, activeAthleteOriginalIndex, activeAttemptNr,
+    currentRound, timerActive: storeTimerActive, timerTimeLeft: storeTimerTimeLeft,
+    updatePodejscieStatus, updatePodejscieWaga,
+    setActiveAthlete,
+    setActiveGroup,
+    setCurrentRound,
+    setTimerActive: storeSetTimerActive,
+    setTimerTimeLeft: storeSetTimerTimeLeft,
+    socket,
+    setAttemptResultForAnimation,
+    // Dodaj clearAttemptResultForAnimation, jeśli będziemy go używać do czyszczenia po stronie sędziego
+    // clearAttemptResultForAnimation 
   } = useCompetitionStore(state => ({
       zawody: state.zawody,
       kategorie: state.kategorie,
@@ -235,528 +64,775 @@ export default function CompetitionScreen() {
       activeWeight: state.activeWeight,
       activeAthleteOriginalIndex: state.activeAthleteOriginalIndex,
       activeAttemptNr: state.activeAttemptNr,
+      currentRound: state.currentRound,
       timerActive: state.timerActive,
       timerTimeLeft: state.timerTimeLeft,
       updatePodejscieStatus: state.updatePodejscieStatus,
       updatePodejscieWaga: state.updatePodejscieWaga,
-      setInitialData: state.setInitialData,
-      setActiveGroup: state.setActiveGroup,
       setActiveAthlete: state.setActiveAthlete,
-      setActiveAttemptNr: state.setActiveAttemptNr,
+      setActiveGroup: state.setActiveGroup,
+      setCurrentRound: state.setCurrentRound,
       setTimerActive: state.setTimerActive,
       setTimerTimeLeft: state.setTimerTimeLeft,
-      // --- START ZMIANY: Pobierz socket ---
       socket: state.socket,
-      // --- KONIEC ZMIANY ---
+      setAttemptResultForAnimation: state.setAttemptResultForAnimation,
+      // clearAttemptResultForAnimation: state.clearAttemptResultForAnimation,
   }));
 
-  const { width } = useWindowDimensions();
+  const timerActive = useCompetitionStore(state => state.timerActive);
+  const timerTimeLeft = useCompetitionStore(state => state.timerTimeLeft);
+
   const [isSaving, setIsSaving] = useState(false);
   const [headerKlubAvatarDimensions, setHeaderKlubAvatarDimensions] = useState(null);
-  const [headerJudgeAvatarDimensions, setHeaderJudgeAvatarDimensions] = useState({ width: 32, height: 32 });
-
-  // Efekty ładowania avatarów (bez zmian)
-  useEffect(() => {
-    if (zawody.klubAvatar) {
-      Image.getSize(zawody.klubAvatar, (imgWidth, imgHeight) => {
-        const aspectRatio = imgWidth / imgHeight; const maxWidth = 60; const maxHeight = 40;
-        let displayWidth = imgWidth; let displayHeight = imgHeight;
-        if (displayWidth > maxWidth) { displayWidth = maxWidth; displayHeight = displayWidth / aspectRatio; }
-        if (displayHeight > maxHeight) { displayHeight = maxHeight; displayWidth = displayHeight * aspectRatio; }
-        setHeaderKlubAvatarDimensions({ width: displayWidth, height: displayHeight });
-      }, (error) => { console.error('Błąd rozmiaru logo klubu:', error); setHeaderKlubAvatarDimensions(null); });
-    } else { setHeaderKlubAvatarDimensions(null); }
-  }, [zawody.klubAvatar]);
-
-  useEffect(() => {
-    if (zawody.sedzia?.avatar) {
-      Image.getSize(zawody.sedzia.avatar, (imgWidth, imgHeight) => {
-        const size = Math.min(imgWidth, imgHeight); const maxSize = 32;
-        const displaySize = Math.min(size, maxSize);
-        setHeaderJudgeAvatarDimensions({ width: displaySize, height: displaySize });
-      }, (error) => { console.error('Błąd rozmiaru avatara sędziego:', error); setHeaderJudgeAvatarDimensions({ width: 32, height: 32 }); });
-    } else { setHeaderJudgeAvatarDimensions({ width: 32, height: 32 }); }
-  }, [zawody.sedzia?.avatar]);
-
-  // --- Logika timera ---
+  const [headerJudgeAvatarDimensions, setHeaderJudgeAvatarDimensions] = useState(null);
   const timerIntervalRef = useRef(null);
-  const stableSetTimerTimeLeft = useCallback(setTimerTimeLeft, [setTimerTimeLeft]);
-  const stableSetTimerActive = useCallback(setTimerActive, [setTimerActive]);
 
-  // Definicja handleTimerFinish w zasięgu komponentu
-  // --- START ZMIANY: Przekaż handleAttemptStatusChange jako argument ---
-  const handleTimerFinish = useCallback((attemptStatusChangeFn) => {
-    console.log("[CompetitionScreen] Czas minął!");
-    const state = useCompetitionStore.getState();
-    if (state.activeAthleteOriginalIndex !== null && state.activeAttemptNr) {
-        const athlete = state.zawodnicy[state.activeAthleteOriginalIndex];
-        if (athlete && !athlete[`podejscie${state.activeAttemptNr}Status`]) {
-            // Wywołaj przekazaną funkcję
-            attemptStatusChangeFn(state.activeAthleteOriginalIndex, state.activeAttemptNr, 'failed');
+  const [showAttemptAnimation, setShowAttemptAnimation] = useState(false); // Animacja na ekranie sędziego
+  const [attemptAnimationSuccess, setAttemptAnimationSuccess] = useState(false);
+  const animationTimeoutRef = useRef(null); // Timeout dla logiki po animacji na ekranie sędziego
+
+  const [isResultsModalVisible, setIsResultsModalVisible] = useState(false);
+  const [modalSelectedCategory, setModalSelectedCategory] = useState(null);
+  const [modalSelectedWeight, setModalSelectedWeight] = useState(null);
+  const ignoreNextAthleteSelectionRef = useRef(false);
+
+  useEffect(() => {
+    if (activeCategory) setModalSelectedCategory(activeCategory);
+    else if (kategorie.length > 0) setModalSelectedCategory(kategorie[0].nazwa);
+  }, [activeCategory, kategorie]);
+
+  useEffect(() => {
+    if (activeWeight) setModalSelectedWeight(activeWeight);
+    else {
+        const catObj = kategorie.find(k => k.nazwa === modalSelectedCategory);
+        if (catObj && catObj.wagi && catObj.wagi.length > 0) {
+            setModalSelectedWeight(catObj.wagi[0]);
+        } else {
+            setModalSelectedWeight(null);
         }
     }
-  }, []); // Usuń handleAttemptStatusChange z zależności, bo jest przekazywane
-  // --- KONIEC ZMIANY ---
+  }, [activeWeight, modalSelectedCategory, kategorie]);
 
-  // --- START ZMIANY: Zaktualizuj stableHandleTimerFinish ---
-  // Przekaż handleAttemptStatusChange do stableHandleTimerFinish
-  const stableHandleTimerFinish = useCallback(() => handleTimerFinish(handleAttemptStatusChange), [handleTimerFinish, handleAttemptStatusChange]);
-  // --- KONIEC ZMIANY ---
 
-  // Efekt dla timera - USUŃ syncData z interwału
-  useEffect(() => {
-    console.log(`[Timer useEffect] Running. timerActive: ${timerActive}`);
+  const modalCategoryOptions = useMemo(() => kategorie.map(k => ({ label: k.nazwa, value: k.nazwa })), [kategorie]);
+  
+  const modalWeightOptions = useMemo(() => {
+    if (!modalSelectedCategory) return [];
+    const categoryObj = kategorie.find(k => k.nazwa === modalSelectedCategory);
+    if (!categoryObj || !categoryObj.wagi) return [];
+    return categoryObj.wagi.map(w => ({ label: String(w), value: w }));
+  }, [kategorie, modalSelectedCategory]);
+
+  const syncData = useCallback(async (dataToSync) => {
+    if (isSaving && !dataToSync) return; // Prevent re-entry if already saving, unless specific data is passed
+    setIsSaving(true);
+    try {
+      const currentState = useCompetitionStore.getState();
+      let dataToSend = {
+        zawody: currentState.zawody,
+        kategorie: currentState.kategorie,
+        zawodnicy: currentState.zawodnicy,
+        activeCategory: currentState.activeCategory,
+        activeWeight: currentState.activeWeight,
+        activeAthleteOriginalIndex: currentState.activeAthleteOriginalIndex,
+        activeAttemptNr: currentState.activeAttemptNr,
+        currentRound: currentState.currentRound,
+        // Timer state should ideally be managed by the server or only synced when explicitly changed by judge
+        timerActive: currentState.timerActive,
+        timerTimeLeft: currentState.timerTimeLeft,
+      };
+      if (dataToSync) {
+        dataToSend = { ...dataToSend, ...dataToSync };
+      }
+      await saveAppData(dataToSend);
+    } catch (error) {
+      console.error('[CompetitionScreen] Błąd synchronizacji danych:', error);
+      Alert.alert("Błąd", "Nie udało się zsynchronizować danych z serwerem.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isSaving, setIsSaving]); // Removed useCompetitionStore from dependencies as getState is used
+
+  const handleShowResultsOnAthleteView = async () => {
+    if (socket && socket.connected && modalSelectedCategory && modalSelectedWeight) {
+      console.log(`[CompetitionScreen] Requesting to show results for ${modalSelectedCategory} - ${modalSelectedWeight}kg`);
+      
+      ignoreNextAthleteSelectionRef.current = true; 
+
+      setActiveAthlete(null); // Clear active athlete on judge screen
+      
+      const currentGlobalRound = useCompetitionStore.getState().currentRound;
+      const dataToSyncForResults = { 
+        activeAthleteOriginalIndex: null, // No active athlete when showing full group results
+        activeCategory: modalSelectedCategory,
+        activeWeight: modalSelectedWeight,
+        activeAttemptNr: currentGlobalRound // Keep current round context
+      };
+      
+      await syncData(dataToSyncForResults); // Sync state for audience view context
+
+      socket.emit('showCategoryResults', { // Event for AthleteViewScreen
+        category: modalSelectedCategory,
+        weightClass: modalSelectedWeight,
+      });
+      setIsResultsModalVisible(false);
+    } else {
+      Alert.alert("Błąd", "Nie można wysłać żądania. Sprawdź połączenie lub wybrane opcje.");
+    }
+  };
+  
+  const stableSetTimerTimeLeft = useCallback((value) => storeSetTimerTimeLeft(value), [storeSetTimerTimeLeft]);
+  const stableSetTimerActive = useCallback((value) => storeSetTimerActive(value), [storeSetTimerActive]);
+
+  const handleResetTimer = useCallback(async () => {
+    if (isSaving || showAttemptAnimation) {
+        Alert.alert("Uwaga", "Nie można zresetować timera podczas zapisu lub animacji.");
+        return;
+    }
+    stableSetTimerActive(false);
+    stableSetTimerTimeLeft(MAX_TIMER_SECONDS);
+    if (socket && socket.connected) {
+      // Pass athleteOriginalIndex for context on AthleteViewScreen
+      socket.emit('timerReset', { 
+          timeLeft: MAX_TIMER_SECONDS,
+          athleteOriginalIndex: useCompetitionStore.getState().activeAthleteOriginalIndex 
+      });
+    }
+    await syncData({ timerActive: false, timerTimeLeft: MAX_TIMER_SECONDS });
+  }, [isSaving, showAttemptAnimation, stableSetTimerActive, stableSetTimerTimeLeft, socket, syncData]);
+
+  const handleSelectAthlete = useCallback(async (selectedAthleteOriginalIndex) => {
+    if (ignoreNextAthleteSelectionRef.current) {
+      ignoreNextAthleteSelectionRef.current = false; 
+      console.log('[CompetitionScreen] Ignoring first athlete selection after requesting results view.');
+      return; 
+    }
+    ignoreNextAthleteSelectionRef.current = false;
+
     if (timerActive) {
-      console.log(`[Timer useEffect] Starting interval...`);
+      Alert.alert("Timer Aktywny", "Nie można zmienić zawodnika podczas aktywnego czasu.");
+      return;
+    }
+    if (isSaving) return;
+    
+    setActiveAthlete(selectedAthleteOriginalIndex);
+    // When selecting an athlete, set activeAttemptNr to currentRound
+    // This ensures that if we navigate back/forth between athletes, the active attempt aligns with the round
+    await syncData({ activeAthleteOriginalIndex: selectedAthleteOriginalIndex, activeAttemptNr: useCompetitionStore.getState().currentRound });
+  }, [setActiveAthlete, syncData, timerActive, isSaving, currentRound]);
+
+  const handleTimerFinish = useCallback(() => {
+    stableSetTimerActive(false);
+    stableSetTimerTimeLeft(0);
+    if (socket && socket.connected) {
+      socket.emit('stopTimer', { 
+          finalTimeLeft: 0, 
+          reason: 'timer_expired',
+          athleteOriginalIndex: useCompetitionStore.getState().activeAthleteOriginalIndex 
+      });
+    }
+    // Optionally sync this state
+    // syncData({ timerActive: false, timerTimeLeft: 0 });
+  }, [stableSetTimerActive, stableSetTimerTimeLeft, socket, syncData]);
+
+  useEffect(() => {
+    const currentActiveAthleteIndex = useCompetitionStore.getState().activeAthleteOriginalIndex;
+    if (timerActive) {
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); // Clear existing before starting new
       timerIntervalRef.current = setInterval(() => {
-        stableSetTimerTimeLeft(prevTime => {
-          console.log(`[Timer Interval Tick] prevTime: ${prevTime}`);
-          if (prevTime <= 1) {
-            console.log(`[Timer Interval Tick] Time <= 1, clearing interval and stopping timer.`);
-            clearInterval(timerIntervalRef.current);
-            timerIntervalRef.current = null;
-            stableSetTimerActive(false); // Ustaw lokalnie
-            stableHandleTimerFinish(); // Wywołaj funkcję kończącą
-            // --- START ZMIANY: Wyślij event stopTimer zamiast syncData ---
-            if (socket) {
-              console.log('[Timer Interval Tick] Emitting stopTimer event.');
-              socket.emit('stopTimer');
-            }
-            // --- KONIEC ZMIANY ---
-            return 0;
-          }
-          // UWAGA: Nie wysyłamy już nic co sekundę!
-          return prevTime - 1;
-        });
+        const newTime = useCompetitionStore.getState().timerTimeLeft - 1;
+        stableSetTimerTimeLeft(newTime);
+        if (socket && socket.connected) {
+          socket.emit('timerTick', { 
+            timeLeft: newTime, 
+            athleteOriginalIndex: currentActiveAthleteIndex 
+          });
+        }
+        if (newTime <= 0) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+          handleTimerFinish();
+        }
       }, 1000);
     } else {
       if (timerIntervalRef.current) {
-        console.log(`[Timer useEffect] Clearing interval because timerActive is false.`);
         clearInterval(timerIntervalRef.current);
         timerIntervalRef.current = null;
       }
     }
-
     return () => {
       if (timerIntervalRef.current) {
-        console.log(`[Timer useEffect Cleanup] Clearing interval.`);
         clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null; // Dodaj czyszczenie refa w cleanupie
+        timerIntervalRef.current = null;
       }
     };
-    // --- START ZMIANY: Usuń syncData z zależności, dodaj socket ---
-  }, [timerActive, stableSetTimerTimeLeft, stableSetTimerActive, stableHandleTimerFinish, socket]); // Dodaj socket do zależności
-  // --- KONIEC ZMIANY ---
+  }, [timerActive, stableSetTimerTimeLeft, socket, handleTimerFinish]); // Removed stableSetTimerActive as it's not directly used in interval logic
+
+  const athletesInCurrentGroup = useMemo(() => {
+    if (!activeCategory || !activeWeight || !zawodnicy) return [];
+    return zawodnicy
+      .filter(z => z.kategoria === activeCategory && String(z.waga) === String(activeWeight));
+  }, [zawodnicy, activeCategory, activeWeight]);
+
+  const upcomingAthletesForCurrentRound = useMemo(() => {
+    if (!activeCategory || !activeWeight || currentRound > 3) return [];
+    return athletesInCurrentGroup
+      .filter(athlete => !hasAthleteCompletedAttemptInRound(athlete, currentRound))
+      .sort((a, b) => {
+        const weightA = getAthleteDeclaredWeightForRound(a, currentRound);
+        const weightB = getAthleteDeclaredWeightForRound(b, currentRound);
+        if (weightA === weightB) {
+            // Sort by originalIndex (lot number) if weights are equal
+            const indexA = parseInt(String(a.nrStartowy || a.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+            const indexB = parseInt(String(b.nrStartowy || b.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+            return indexA - indexB;
+        }
+        return weightA - weightB;
+      });
+  }, [athletesInCurrentGroup, currentRound, activeCategory, activeWeight]);
+
+  const currentAthlete = useMemo(() => {
+    if (activeAthleteOriginalIndex === null || !zawodnicy || zawodnicy.length === 0) return null;
+    return zawodnicy.find(z => z.originalIndex === activeAthleteOriginalIndex);
+  }, [zawodnicy, activeAthleteOriginalIndex]);
+
+  const handleNextCompetitor = useCallback(async () => {
+    if (timerActive || isSaving || showAttemptAnimation) {
+      // Alert.alert("Uwaga", "Nie można zmienić zawodnika podczas aktywnego timera, zapisu lub animacji.");
+      console.warn("[CompetitionScreen] Next competitor blocked: timer/saving/animation active.");
+      return;
+    }
+    if (!activeCategory || !activeWeight) {
+      Alert.alert("Informacja", "Wybierz najpierw kategorię i wagę.");
+      return;
+    }
+    const nextAthletesInCurrentList = upcomingAthletesForCurrentRound;
+    if (nextAthletesInCurrentList.length > 0) {
+      const nextAthleteToCall = nextAthletesInCurrentList[0];
+      setActiveAthlete(nextAthleteToCall.originalIndex);
+      // When moving to next competitor, activeAttemptNr should be the currentRound
+      await syncData({ activeAthleteOriginalIndex: nextAthleteToCall.originalIndex, activeAttemptNr: currentRound });
+      console.log(`[CompetitionScreen] Advanced to next competitor: ${nextAthleteToCall.imie}, Round: ${currentRound}`);
+    } else {
+      Alert.alert("Informacja", "Brak kolejnych zawodników w tej rundzie dla wybranej grupy.");
+      // Optionally, clear active athlete if no one is next in this round
+      // setActiveAthlete(null);
+      // await syncData({ activeAthleteOriginalIndex: null });
+    }
+  }, [currentRound, timerActive, isSaving, showAttemptAnimation, upcomingAthletesForCurrentRound, setActiveAthlete, syncData, activeCategory, activeWeight]);
+
+  const displayAthletesInGroup = useMemo(() => {
+    if (!athletesInCurrentGroup) return [];
+    return [...athletesInCurrentGroup].sort((a, b) => {
+        const weightA = getAthleteDeclaredWeightForRound(a, currentRound);
+        const weightB = getAthleteDeclaredWeightForRound(b, currentRound);
+        if (weightA === weightB) {
+            const indexA = parseInt(String(a.nrStartowy || a.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+            const indexB = parseInt(String(b.nrStartowy || b.originalIndex).replace(/[^0-9]/g, ''), 10) || Infinity;
+            return indexA - indexB;
+        }
+        return weightA - weightB;
+    });
+  }, [athletesInCurrentGroup, currentRound]);
+
+  const handlePreviousCompetitor = useCallback(async () => {
+    if (timerActive || isSaving || showAttemptAnimation) {
+        Alert.alert("Uwaga", "Nie można zmienić zawodnika podczas aktywnego timera, zapisu lub animacji.");
+        return;
+    }
+    if (!activeCategory || !activeWeight || !currentAthlete) {
+        Alert.alert("Informacja", "Brak aktywnego zawodnika lub grupy do nawigacji wstecz.");
+        return;
+    }
+
+    const currentIndexInGroup = displayAthletesInGroup.findIndex(a => a.originalIndex === activeAthleteOriginalIndex);
+    if (currentIndexInGroup > 0) {
+        const previousAthlete = displayAthletesInGroup[currentIndexInGroup - 1];
+        setActiveAthlete(previousAthlete.originalIndex);
+        await syncData({ activeAthleteOriginalIndex: previousAthlete.originalIndex, activeAttemptNr: currentRound });
+    } else {
+        Alert.alert("Informacja", "To jest pierwszy zawodnik w tej grupie.");
+    }
+  }, [timerActive, isSaving, showAttemptAnimation, activeCategory, activeWeight, currentAthlete, displayAthletesInGroup, setActiveAthlete, syncData, currentRound, activeAthleteOriginalIndex]);
 
 
-  // --- Logika pomocnicza (categoryOptions, weightOptions, filteredAthletes, etc.) ---
+  const handlePreviousRound = useCallback(async () => {
+    if (isSaving || timerActive || showAttemptAnimation) return;
+    if (currentRound > 1) {
+      const prevRound = currentRound - 1;
+      setCurrentRound(prevRound);
+      setActiveAthlete(null); // Clear active athlete when changing rounds
+      await syncData({ currentRound: prevRound, activeAthleteOriginalIndex: null, activeAttemptNr: prevRound });
+    } else {
+      Alert.alert("Informacja", "Jesteś już na pierwszej rundzie.");
+    }
+  }, [currentRound, setCurrentRound, syncData, isSaving, timerActive, showAttemptAnimation, setActiveAthlete]);
+
+  const handleNextRound = useCallback(async () => {
+    if (isSaving || timerActive || showAttemptAnimation) return;
+    if (currentRound < 3) {
+      const nextRound = currentRound + 1;
+      setCurrentRound(nextRound);
+      setActiveAthlete(null); // Clear active athlete when changing rounds
+      await syncData({ currentRound: nextRound, activeAthleteOriginalIndex: null, activeAttemptNr: nextRound });
+    } else {
+      Alert.alert("Informacja", "Jesteś już na ostatniej, trzeciej rundzie.");
+    }
+  }, [currentRound, setCurrentRound, syncData, isSaving, timerActive, showAttemptAnimation, setActiveAthlete]);
+
+  useEffect(() => {
+    // Auto-select first competitor if none is active and there are upcoming athletes
+    if (activeAthleteOriginalIndex === null && upcomingAthletesForCurrentRound.length > 0 && !timerActive && !showAttemptAnimation && activeCategory && activeWeight && !ignoreNextAthleteSelectionRef.current) {
+      handleNextCompetitor();
+    }
+  }, [activeAthleteOriginalIndex, upcomingAthletesForCurrentRound, timerActive, showAttemptAnimation, activeCategory, activeWeight, handleNextCompetitor]);
+
+  const handleAttemptStatusChange = useCallback(async (athleteOriginalIndex, attemptNo, status) => {
+    if (isSaving) return;
+    setIsSaving(true);
+    setShowAttemptAnimation(true); // For judge's screen animation
+    setAttemptAnimationSuccess(status === 'passed');
+
+    updatePodejscieStatus(athleteOriginalIndex, attemptNo, status);
+    // Sync data immediately after status update for responsiveness
+    await syncData({ /* Consider what specific part of state needs sync here if not all */ });
+
+    const athleteForAnimation = zawodnicy.find(z => z.originalIndex === athleteOriginalIndex);
+    const animationData = {
+        success: status === 'passed',
+        athleteOriginalIndex: athleteOriginalIndex,
+        attemptNo: attemptNo,
+        category: athleteForAnimation?.kategoria || activeCategory, // Pass current category
+        weightClass: athleteForAnimation?.waga || activeWeight    // Pass current weight class
+    };
+
+    if (socket && socket.connected) {
+      socket.emit('attemptAnimationTriggered', animationData);
+    }
+    setAttemptResultForAnimation(animationData); // Set in global store for AthleteViewScreen
+
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+    }
+
+    // Total delay before moving to next competitor: Audience Animation + Audience Results Display
+    const totalDelayForNextCompetitor = ANIMATION_DURATION + TEMP_RESULTS_DISPLAY_DURATION;
+
+    animationTimeoutRef.current = setTimeout(async () => {
+      setShowAttemptAnimation(false); // Hide judge's screen animation
+
+      const currentStoreState = useCompetitionStore.getState();
+      const currentStoreActiveAthleteOriginalIndex = currentStoreState.activeAthleteOriginalIndex;
+      const currentStoreActiveAttemptNr = currentStoreState.activeAttemptNr;
+
+      // Automatyczne przejście do następnego tylko jeśli to było aktywne podejście
+      if (status === 'passed' || status === 'failed') {
+        if (athleteOriginalIndex === currentStoreActiveAthleteOriginalIndex && attemptNo === currentStoreActiveAttemptNr) {
+            console.log(`[CompetitionScreen] Attempt processed. Advancing to next competitor after ${totalDelayForNextCompetitor}ms delay.`);
+            await handleNextCompetitor();
+        }
+      }
+      setIsSaving(false);
+      // Optionally clear attemptResultForAnimation from store here if CompetitionScreen "owns" it
+      // useCompetitionStore.getState().clearAttemptResultForAnimation();
+    }, totalDelayForNextCompetitor);
+
+    if (socket && socket.connected) {
+      // This event is for general data sync, not animation trigger
+      socket.emit('attemptUpdated', { athleteOriginalIndex, attemptNo, status });
+    }
+  }, [isSaving, zawodnicy, activeCategory, activeWeight, updatePodejscieStatus, syncData, socket, setAttemptResultForAnimation, handleNextCompetitor, setShowAttemptAnimation, setAttemptAnimationSuccess, animationTimeoutRef]);
+
+  const handleWeightChange = useCallback(async (athleteOriginalIndex, attemptNo, weight) => {
+    if (isSaving) return;
+    // No setIsSaving(true) here, as it's a quick update, unless you want to show a loader
+    updatePodejscieWaga(athleteOriginalIndex, attemptNo, weight);
+    await syncData({ /* specific data if needed */ }); // Sync after weight change
+    if (socket && socket.connected) {
+      socket.emit('attemptWeightUpdated', { athleteOriginalIndex, attemptNo, weight });
+    }
+  }, [isSaving, updatePodejscieWaga, syncData, socket]);
+
+  const handleStartOrRestartAttempt = useCallback(async () => {
+    const currentStoreState = useCompetitionStore.getState();
+    const currentStoreAthleteOriginalIndex = currentStoreState.activeAthleteOriginalIndex;
+    const currentStoreActiveAttemptNr = currentStoreState.activeAttemptNr;
+    const currentStoreCurrentRound = currentStoreState.currentRound;
+    const currentStoreTimerTimeLeft = currentStoreState.timerTimeLeft;
+
+    if (!currentStoreAthleteOriginalIndex) {
+        Alert.alert("Błąd", "Nie wybrano aktywnego zawodnika.");
+        return;
+    }
+    if (currentStoreActiveAttemptNr !== currentStoreCurrentRound) {
+      Alert.alert("Uwaga", `Próbujesz uruchomić timer dla podejścia ${currentStoreActiveAttemptNr}, ale aktualna runda to ${currentStoreCurrentRound}. Zmień rundę lub zawodnika.`);
+      return;
+    }
+
+    let timeToStartFrom = MAX_TIMER_SECONDS;
+    let isResuming = false;
+
+    if (currentStoreTimerTimeLeft > 0 && currentStoreTimerTimeLeft < MAX_TIMER_SECONDS) {
+      timeToStartFrom = currentStoreTimerTimeLeft;
+      isResuming = true;
+    }
+
+    stableSetTimerTimeLeft(timeToStartFrom);
+    stableSetTimerActive(true);
+
+    if (socket && socket.connected) {
+      socket.emit('startTimer', {
+        timeLeft: timeToStartFrom,
+        athleteOriginalIndex: currentStoreAthleteOriginalIndex, // Zmieniono z athleteId
+        attemptNr: currentStoreActiveAttemptNr,
+        isResuming: isResuming
+      });
+    }
+    await syncData({ timerActive: true, timerTimeLeft: timeToStartFrom }); // Sync timer state
+  }, [stableSetTimerActive, stableSetTimerTimeLeft, socket, syncData]);
+
+  const handleSelectCategory = useCallback(async (category) => {
+    ignoreNextAthleteSelectionRef.current = false;
+    setActiveGroup(category, null);
+    await syncData({ activeCategory: category, activeWeight: null, activeAthleteOriginalIndex: null, currentRound: 1, activeAttemptNr: 1 });
+  }, [setActiveGroup, syncData]);
+
+  const handleSelectWeight = useCallback(async (weight) => {
+    if (!activeCategory) {
+      Alert.alert("Błąd", "Najpierw wybierz kategorię.");
+      return;
+    }
+    ignoreNextAthleteSelectionRef.current = false;
+    setActiveGroup(activeCategory, weight);
+    await syncData({ activeWeight: weight, activeAthleteOriginalIndex: null, currentRound: 1, activeAttemptNr: 1 });
+  }, [activeCategory, setActiveGroup, syncData]);
+
   const categoryOptions = useMemo(() => kategorie.map(k => ({ label: k.nazwa, value: k.nazwa })), [kategorie]);
-
-  const activeCategoryObject = useMemo(() => {
-      return kategorie.find(k => k.nazwa === activeCategory);
-  }, [kategorie, activeCategory]);
+  const activeCategoryObject = useMemo(() => kategorie.find(k => k.nazwa === activeCategory), [kategorie, activeCategory]);
 
   const completedWeights = useMemo(() => {
-      const completed = new Set();
-      if (!activeCategoryObject || !zawodnicy) {
-          return completed;
-      }
-      activeCategoryObject.wagi.forEach(waga => {
-          const athletesInGroup = zawodnicy.filter(z => z.kategoria === activeCategory && z.waga === waga);
-          if (athletesInGroup.length > 0 && athletesInGroup.every(hasAthleteCompleted)) {
-              completed.add(waga);
-          }
-      });
-      return completed;
+    const completed = new Set();
+    if (!activeCategoryObject || !zawodnicy) return completed;
+    activeCategoryObject.wagi.forEach(waga => {
+        const athletesInGroup = zawodnicy.filter(z => z.kategoria === activeCategory && String(z.waga) === String(waga));
+        if (athletesInGroup.length > 0 && athletesInGroup.every(hasAthleteCompletedAllAttempts)) completed.add(waga);
+    });
+    return completed;
   }, [activeCategoryObject, zawodnicy, activeCategory]);
 
   const weightOptions = useMemo(() => {
     if (!activeCategoryObject) return [];
-    const sortedWagi = [...activeCategoryObject.wagi].sort((a, b) => Number(a) - Number(b));
-    return sortedWagi.map(w => ({
-        label: String(w),
-        value: w,
-        isCompleted: completedWeights.has(w)
+    return [...activeCategoryObject.wagi].sort((a, b) => Number(a) - Number(b)).map(w => ({
+        label: String(w), value: w, isCompleted: completedWeights.has(w)
     }));
   }, [activeCategoryObject, completedWeights]);
 
-  const filteredAthletes = useMemo(() => {
-      if (!activeCategory || !activeWeight) return [];
-      return zawodnicy
-        .map((z, index) => ({
-          ...z,
-          originalIndex: index,
-          isCompleted: hasAthleteCompleted(z)
-        }))
-        .filter(z => z.kategoria === activeCategory && z.waga === activeWeight)
-        .sort((a, b) => {
-            const weightA = Number(a.podejscie1) || 0;
-            const weightB = Number(b.podejscie1) || 0;
-            if (a.isCompleted !== b.isCompleted) {
-              return a.isCompleted ? 1 : -1;
+  const totalLiftedInCategory = useMemo(() => {
+    if (!activeCategory || !activeWeight) return 0;
+    return athletesInCurrentGroup.reduce((sum, athlete) => {
+        let athleteSum = 0;
+        for (let i = 1; i <= 3; i++) {
+            if (athlete[`podejscie${i}Status`] === 'passed') {
+                athleteSum += getAthleteDeclaredWeightForRound(athlete, i);
             }
-            return weightA - weightB;
-        });
-  }, [zawodnicy, activeCategory, activeWeight]);
+        }
+        return sum + athleteSum;
+    }, 0);
+  }, [athletesInCurrentGroup, activeCategory, activeWeight]);
 
-  const currentAthleteFilteredIndex = useMemo(() => {
-      if (activeAthleteOriginalIndex === null) return null;
-      return filteredAthletes.findIndex(z => z.originalIndex === activeAthleteOriginalIndex);
-  }, [filteredAthletes, activeAthleteOriginalIndex]);
+  useEffect(() => {
+    if (zawody.klubAvatar) {
+      Image.getSize(zawody.klubAvatar, (width, height) => {
+        const aspectRatio = width / height;
+        const targetSize = Platform.OS === 'web' ? 50 : 40;
+        setHeaderKlubAvatarDimensions({ width: targetSize, height: targetSize / aspectRatio });
+      }, (error) => {
+        console.error("Error getting klubAvatar size:", error);
+        setHeaderKlubAvatarDimensions(null);
+      });
+    } else setHeaderKlubAvatarDimensions(null);
+  }, [zawody.klubAvatar]);
 
-  const currentAthlete = currentAthleteFilteredIndex !== null && currentAthleteFilteredIndex !== -1
-    ? filteredAthletes[currentAthleteFilteredIndex]
-    : null;
+  useEffect(() => {
+    if (zawody.sedzia?.avatar) {
+      Image.getSize(zawody.sedzia.avatar, (width, height) => {
+        const aspectRatio = width / height;
+        const targetSize = Platform.OS === 'web' ? 50 : 40;
+        setHeaderJudgeAvatarDimensions({ width: targetSize, height: targetSize / aspectRatio });
+      }, (error) => {
+        console.error("Error getting judgeAvatar size:", error);
+        setHeaderJudgeAvatarDimensions(null);
+      });
+    } else setHeaderJudgeAvatarDimensions(null);
+  }, [zawody.sedzia?.avatar]);
 
-  // Funkcja synchronizująca dane z backendem (pozostaje do innych akcji)
-  const syncData = useCallback(async (partialData = null) => {
-    if (isSaving) {
-        console.warn('[syncData] Save already in progress. Skipping.');
-        return;
-    }
-    setIsSaving(true);
-    console.time('syncDataDuration');
-    try {
-      const currentState = useCompetitionStore.getState();
-
-      // --- START ZMIANY: Wyklucz 'socket' ze stanu przed wysłaniem ---
-      const { socket, ...stateToSend } = currentState; // Destrukturyzacja, aby oddzielić socket
-      // --- KONIEC ZMIANY ---
-
-      // Użyj partialData jeśli przekazano, inaczej oczyszczonego stanu
-      const dataToSend = partialData
-        ? { ...stateToSend, ...partialData } // Połącz oczyszczony stan z partialData
-        : stateToSend; // Wyślij oczyszczony stan
-
-      // Loguj tylko kluczowe części
-      console.log(`[syncData] Sending update. Timer: ${dataToSend.timerActive}, TimeLeft: ${dataToSend.timerTimeLeft}, ActiveIdx: ${dataToSend.activeAthleteOriginalIndex}`);
-      console.time('saveAppDataApiCall');
-      await saveAppData(dataToSend); // Wyślij dataToSend (już bez obiektu socket)
-      console.timeEnd('saveAppDataApiCall');
-    } catch (error) {
-      // --- START ZMIANY: Loguj konkretny błąd cykliczny ---
-      if (error instanceof TypeError && error.message.includes('cyclic object value')) {
-          console.error('[CompetitionScreen] Błąd synchronizacji danych: Wykryto cykliczny obiekt! Upewnij się, że `socket` jest poprawnie usuwany ze stanu przed wysłaniem.', error);
-      } else {
-          console.error('[CompetitionScreen] Błąd synchronizacji danych:', error);
-      }
-      // --- KONIEC ZMIANY ---
-    } finally {
-      setIsSaving(false);
-      console.timeEnd('syncDataDuration');
-    }
-  }, [isSaving]);
-
-  // --- Obsługa Akcji ---
-
-  const handleSelectCategory = (category) => {
-    console.log(`[CompetitionScreen] handleSelectCategory: ${category}`);
-    setActiveGroup(category, null);
-    syncData(); // Synchronizuj po zmianie grupy
-  };
-
-  const handleSelectWeight = (weight) => {
-    console.log(`[CompetitionScreen] handleSelectWeight: ${weight}`);
-    setActiveGroup(activeCategory, weight);
-    syncData(); // Synchronizuj po zmianie grupy
-  };
-
-  const handleSelectAthlete = (originalIndex) => {
-    console.log(`[CompetitionScreen] handleSelectAthlete: index=${originalIndex}`);
-    setActiveAthlete(originalIndex);
-    syncData(); // Synchronizuj po zmianie zawodnika
-  };
-
-  // Obsługa zmiany statusu podejścia
-  const handleAttemptStatusChange = useCallback(async (athleteOriginalIndex, attemptNr, status) => {
-    if (isSaving) return;
-    console.log(`[CompetitionScreen] handleAttemptStatusChange: index=${athleteOriginalIndex}, attempt=${attemptNr}, status=${status}`);
-    stableSetTimerActive(false); // Zatrzymaj timer natychmiast (lokalnie)
-    updatePodejscieStatus(athleteOriginalIndex, attemptNr, status);
-
-    let nextAttemptNr = attemptNr;
-    if (attemptNr < 3) {
-        nextAttemptNr = attemptNr + 1;
-        console.log(`[CompetitionScreen] Setting next attempt number locally to: ${nextAttemptNr}`);
-        setActiveAttemptNr(nextAttemptNr);
-    } else {
-        console.log(`[CompetitionScreen] Athlete ${athleteOriginalIndex} finished attempts.`);
-    }
-
-    // --- START ZMIANY: Wyślij stopTimer jeśli timer był aktywny ---
-    // Sprawdź stan timera PRZED wywołaniem stableSetTimerActive
-    const wasTimerActive = useCompetitionStore.getState().timerActive;
-    if (wasTimerActive && socket) {
-        console.log('[handleAttemptStatusChange] Emitting stopTimer event.');
-        socket.emit('stopTimer');
-    }
-    // --- KONIEC ZMIANY ---
-
-    await syncData(); // Synchronizuj stan PO aktualizacji statusu i numeru podejścia
-
-    console.log(`[CompetitionScreen] handleAttemptStatusChange finished for attempt ${attemptNr}`);
-
-  }, [isSaving, stableSetTimerActive, updatePodejscieStatus, setActiveAttemptNr, syncData, socket]); // Dodaj socket do zależności
-
-  // Obsługa zmiany wagi w inpucie
-  const handleWeightChange = (athleteOriginalIndex, attemptNr, weight) => {
-    console.log(`[CompetitionScreen] handleWeightChange: index=${athleteOriginalIndex}, attempt=${attemptNr}, weight=${weight}`);
-    updatePodejscieWaga(athleteOriginalIndex, attemptNr, weight);
-    // syncData(); // Odkomentuj, jeśli zmiana wagi ma być natychmiast widoczna i synchronizowana
-  };
-
-  const handleStartAttempt = () => {
-    console.log(`[CompetitionScreen] handleStartAttempt`);
-    if (currentAthlete && !timerActive && socket) { // Sprawdź czy socket istnieje
-      stableSetTimerActive(true); // Ustaw stan lokalnie
-      // --- START ZMIANY: Wyślij event startTimer zamiast syncData ---
-      console.log('[CompetitionScreen] Emitting startTimer event.');
-      socket.emit('startTimer', { initialTime: 60 }); // Wyślij event startu
-      // syncData(); // <--- USUNIĘTE
-      // --- KONIEC ZMIANY ---
-    } else if (!socket) {
-        console.warn('[CompetitionScreen] Cannot start timer, socket is not connected.');
-    }
-  };
-
-  const handleStopAttempt = () => {
-    console.log(`[CompetitionScreen] handleStopAttempt`);
-    if (timerActive && socket) { // Sprawdź czy socket istnieje
-      stableSetTimerActive(false); // Ustaw stan lokalnie
-      // --- START ZMIANY: Wyślij event stopTimer zamiast syncData ---
-      console.log('[CompetitionScreen] Emitting stopTimer event.');
-      socket.emit('stopTimer'); // Wyślij event stopu
-      // syncData(); // <--- USUNIĘTE
-      // --- KONIEC ZMIANY ---
-    } else if (!socket) {
-        console.warn('[CompetitionScreen] Cannot stop timer, socket is not connected.');
-    }
-  };
-
-  // --- Renderowanie ---
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Nagłówek */}
-      <LinearGradient colors={[colors.gradient.start, colors.gradient.end]} style={styles.headerBackground}>
-          <View style={styles.headerBar}>
-              <View style={styles.headerSideContainer}>
-                  {zawody.klubAvatar && headerKlubAvatarDimensions ? <Image source={{ uri: zawody.klubAvatar }} style={[styles.headerClubLogo, headerKlubAvatarDimensions]} /> : null}
-                  <View style={styles.headerLocationDate}>
-                      <Text style={styles.headerLocationText}>{zawody.miejsce}</Text>
-                      <Text style={styles.headerDateText}>{zawody.data}</Text>
-                  </View>
-              </View>
-              <Text style={styles.headerLogo}>{zawody.nazwa || 'Benchpress Cup'}</Text>
-              <View style={[styles.headerSideContainer, styles.headerRightAlign]}>
-                  <View style={styles.headerJudgeInfo}><Text style={styles.headerJudgeName}>{`${zawody.sedzia?.imie || ''} ${zawody.sedzia?.nazwisko || ''}`}</Text></View>
-                  {zawody.sedzia?.avatar ? <Image source={{ uri: zawody.sedzia.avatar }} style={[styles.headerJudgeAvatar, headerJudgeAvatarDimensions]} /> : null}
-              </View>
-          </View>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={[colors.gradient.start, colors.gradient.end]}
+        style={styles.headerBackground}
+      >
+        <View style={styles.headerBar}>
+            <View style={[styles.headerSideContainer, styles.headerLeftAlign]}>
+                {headerKlubAvatarDimensions && zawody.klubAvatar ? (
+                    <Image source={{ uri: zawody.klubAvatar }} style={[styles.headerClubLogo, headerKlubAvatarDimensions]} resizeMode="contain" />
+                ) : <View style={styles.headerAvatarPlaceholder} />}
+                <View style={styles.headerLocationDate}>
+                    <Text style={styles.headerLocationText} numberOfLines={1}>{zawody.miejsce || 'Lokalizacja'}</Text>
+                    <Text style={styles.headerDateText}>{zawody.data || 'Data'}</Text>
+                </View>
+            </View>
+            <Text style={styles.headerLogo}>{zawody.nazwa || 'Nazwa Zawodów'}</Text>
+            <View style={[styles.headerSideContainer, styles.headerRightAlign]}>
+                <View style={styles.headerJudgeInfo}>
+                    <Text style={styles.headerJudgeName} numberOfLines={1}>{zawody.sedzia?.imie || 'Sędzia'} {zawody.sedzia?.nazwisko || ''}</Text>
+                </View>
+                {headerJudgeAvatarDimensions && zawody.sedzia?.avatar ? (
+                    <Image source={{ uri: zawody.sedzia.avatar }} style={[styles.headerJudgeAvatar, headerJudgeAvatarDimensions]} resizeMode="contain" />
+                ) : <View style={styles.headerAvatarPlaceholder} />}
+            </View>
+        </View>
         <NavBar navigation={navigation} />
       </LinearGradient>
 
-      {/* Główna zawartość */}
-      <View style={styles.mainContent}>
-        <Text style={styles.mainTitle}>Zarządzaj przebiegiem zawodów</Text>
-        <View style={styles.columnsContainer}>
-
-          {/* Lewa Kolumna: Wybór i Podejścia */}
-          <View style={styles.leftColumn}>
-            {/* Karta Wyboru */}
-            <View style={styles.card}>
-              <Text style={styles.columnTitle}>Wybór grupy</Text>
-              <OptionSelector
-                label="Kategoria"
-                options={categoryOptions}
-                selectedValue={activeCategory}
-                onSelect={handleSelectCategory}
-                placeholder="Wybierz kategorię"
-              />
-              <OptionSelector
-                label="Waga"
-                options={weightOptions}
-                selectedValue={activeWeight}
-                onSelect={handleSelectWeight}
-                placeholder="Wybierz wagę"
-              />
-              {activeCategory && activeWeight && (
-                <AthleteList
-                  athletes={filteredAthletes}
-                  currentAthleteFilteredIndex={currentAthleteFilteredIndex}
-                  onSelectAthlete={handleSelectAthlete}
-                />
-              )}
-            </View>
-
-            {/* Karta Podejść */}
-            <View style={styles.card}>
-              <Text style={styles.columnTitle}>Podejścia zawodnika</Text>
-              <CurrentAthleteManager
-                athlete={currentAthlete}
-                athleteOriginalIndex={activeAthleteOriginalIndex}
-                currentAttemptNr={activeAttemptNr}
-                onAttemptStatusChange={handleAttemptStatusChange}
-                onWeightChange={handleWeightChange}
-                isSaving={isSaving}
-              />
-            </View>
-          </View>
-
-          {/* Prawa Kolumna: Zarządzanie */}
-          <View style={styles.rightColumn}>
-            <View style={styles.card}>
-              <Text style={styles.columnTitle}>Zarządzanie</Text>
-
-              {/* Timer */}
-              <Timer
-                isActive={timerActive}
-                timeLeft={timerTimeLeft}
-              />
-
-              {/* Info o aktualnym zawodniku i podejściu */}
-              <View style={styles.currentStatusInfo}>
-                <Text style={styles.currentStatusLabel}>Aktualnie:</Text>
-                {currentAthlete ? (
-                  <>
-                    <Text style={styles.currentStatusText}>
-                      {currentAthlete.imie} {currentAthlete.nazwisko} ({currentAthlete.klub || 'brak klubu'})
-                    </Text>
-                    <Text style={styles.currentStatusText}>
-                      Podejście: {activeAttemptNr} / Ciężar: {currentAthlete[`podejscie${activeAttemptNr}`] || '-'} kg
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={styles.currentStatusText}>Wybierz zawodnika</Text>
-                )}
+      <ScrollView style={styles.contentContainerScrollView} contentContainerStyle={styles.contentContainer}>
+        <View style={styles.mainContent}>
+          <View style={styles.columnsContainer}>
+            <View style={styles.leftColumn}>
+              {/* Karta Wybór grupy */}
+              <View style={[styles.card, styles.groupSelectorCard]}>
+                <Text style={styles.columnTitle}>Wybór grupy</Text>
+                <View style={styles.optionSelectorContainerInColumn}>
+                  <OptionSelector
+                    label="Kategoria"
+                    options={categoryOptions}
+                    selectedValue={activeCategory}
+                    onSelect={handleSelectCategory}
+                    // placeholder="Wszystkie kategorie" // Placeholder usunięty z OptionSelector
+                    loading={isSaving}
+                    disabled={isSaving || timerActive || showAttemptAnimation}
+                  />
+                </View>
+                <View style={styles.optionSelectorContainerInColumn}>
+                  <OptionSelector
+                    label="Waga"
+                    options={weightOptions}
+                    selectedValue={activeWeight}
+                    onSelect={handleSelectWeight}
+                    // placeholder="Wszystkie wagi" // Placeholder usunięty
+                    loading={isSaving || !activeCategory}
+                    disabled={!activeCategory || isSaving || timerActive || showAttemptAnimation}
+                  />
+                </View>
               </View>
-
-              {/* Przyciski Akcji */}
-              <View style={styles.mainActionButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.mainActionButton, styles.startButton,
-                    (!currentAthlete || timerActive || isSaving) && styles.actionButtonDisabled
-                  ]}
-                  onPress={handleStartAttempt}
-                  disabled={!currentAthlete || timerActive || isSaving}
-                >
-                  {isSaving ? <ActivityIndicator size="small" color={colors.textLight} /> : <Text style={styles.mainActionButtonText}>Rozpocznij podejście</Text>}
-                </TouchableOpacity>
-                 <TouchableOpacity
-                  style={[
-                    styles.mainActionButton, styles.stopButton,
-                    (!timerActive || isSaving) && styles.actionButtonDisabled
-                  ]}
-                  onPress={handleStopAttempt}
-                  disabled={!timerActive || isSaving}
-                >
-                  {isSaving ? <ActivityIndicator size="small" color={colors.textLight} /> : <Text style={styles.mainActionButtonText}>Zatrzymaj czas</Text>}
-                </TouchableOpacity>
+              {/* Karta Lista Zawodników */}
+              <View style={[styles.card, styles.athleteListCard]}>
+                <Text style={styles.columnTitle}>Lista Zawodników</Text>
+                {(isSaving && !showAttemptAnimation) && <ActivityIndicator size="small" color={colors.primary} style={{marginBottom: spacing.sm}} />}
+                <View style={styles.athleteListContainerInColumn}>
+                  <AthleteList
+                      athletes={displayAthletesInGroup}
+                      currentAthleteOriginalIndex={activeAthleteOriginalIndex}
+                      currentRound={currentRound}
+                      onSelectAthlete={handleSelectAthlete}
+                      onAttemptStatusChange={handleAttemptStatusChange} // Przekazujemy do AthleteList
+                      onWeightChange={handleWeightChange} // Przekazujemy do AthleteList
+                      isSaving={isSaving || showAttemptAnimation} // Blokowanie edycji w AthleteList
+                      athletesInGroupCount={athletesInCurrentGroup.length}
+                      upcomingAthletesInRoundCount={upcomingAthletesForCurrentRound.length}
+                  />
+                </View>
               </View>
             </View>
-            {/* Możesz tu dodać inne karty zarządzania, np. szybkie przejście do następnego zawodnika */}
+            {/* Panel Sędziego */}
+            <View style={styles.rightColumn}>
+              <View style={styles.judgePanelCard}>
+                <Text style={styles.judgePanelTitle}>Panel Sędziego</Text>
+                <View style={styles.judgePanelContent}>
+                    <View style={styles.currentAthleteManagerWrapper}>
+                        <CurrentAthleteManager
+                            athlete={currentAthlete}
+                            athleteOriginalIndex={activeAthleteOriginalIndex}
+                            currentAttemptNr={activeAttemptNr} // Przekazujemy aktualny numer podejścia ze store
+                            onAttemptStatusChange={handleAttemptStatusChange}
+                            onWeightChange={handleWeightChange}
+                            isSaving={isSaving || showAttemptAnimation}
+                            currentRoundForDisplay={currentRound} // Przekazujemy aktualną rundę do wyświetlenia
+                        />
+                    </View>
+                    {currentAthlete && (
+                        <View style={styles.timerSection}>
+                            <TimerDisplay isActive={timerActive} timeLeft={timerTimeLeft} />
+                        </View>
+                    )}
+                    <View style={styles.judgeButtonGroupsContainer}>
+                        {/* Grupa przycisków Timera */}
+                        <View style={styles.judgeButtonGroup}>
+                            <Text style={styles.judgeSectionTitle}>Timer</Text>
+                            <View style={styles.judgeButtonRow}>
+                                {timerActive ? (
+                                    <TouchableOpacity
+                                        style={[styles.mainActionButton, styles.stopButton, (isSaving || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                        onPress={() => {
+                                            stableSetTimerActive(false);
+                                            if (socket && socket.connected) {
+                                                socket.emit('stopTimer', { 
+                                                    finalTimeLeft: useCompetitionStore.getState().timerTimeLeft, 
+                                                    reason: 'manual_stop',
+                                                    athleteOriginalIndex: useCompetitionStore.getState().activeAthleteOriginalIndex
+                                                });
+                                            }
+                                            syncData({timerActive: false});
+                                        }}
+                                        disabled={isSaving || showAttemptAnimation}
+                                    >
+                                        <AntDesign name="pausecircleo" size={20} color={colors.textLight} style={{marginRight: spacing.sm}}/>
+                                        <Text style={styles.mainActionButtonText}>Stop</Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <TouchableOpacity
+                                        style={[styles.mainActionButton, styles.startButton, (!currentAthlete || isSaving || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                        onPress={handleStartOrRestartAttempt}
+                                        disabled={!currentAthlete || isSaving || showAttemptAnimation}
+                                    >
+                                        <AntDesign name="playcircleo" size={20} color={colors.textLight} style={{marginRight: spacing.sm}}/>
+                                        <Text style={styles.mainActionButtonText}>Start</Text>
+                                    </TouchableOpacity>
+                                )}
+                                <TouchableOpacity
+                                    style={[styles.secondaryActionButton, (isSaving || showAttemptAnimation) && styles.actionButtonDisabled]}
+                                    onPress={handleResetTimer}
+                                    disabled={isSaving || showAttemptAnimation}
+                                >
+                                    <MaterialCommunityIcons name="backup-restore" size={20} color={colors.textOnSecondary}/>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        {/* Grupa przycisków Nawigacji Zawodników */}
+                        <View style={styles.judgeButtonGroup}>
+                            <Text style={styles.judgeSectionTitle}>Nawigacja Zawodników</Text>
+                            <View style={styles.judgeButtonRow}>
+                                <TouchableOpacity
+                                    style={[styles.secondaryActionButton, (!activeCategory || !activeWeight || !currentAthlete || displayAthletesInGroup.findIndex(a => a.originalIndex === activeAthleteOriginalIndex) === 0 || isSaving || timerActive || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                    onPress={handlePreviousCompetitor}
+                                    disabled={!activeCategory || !activeWeight || !currentAthlete || displayAthletesInGroup.findIndex(a => a.originalIndex === activeAthleteOriginalIndex) === 0 || isSaving || timerActive || showAttemptAnimation}
+                                >
+                                    <AntDesign name="left" size={16} color={colors.textOnSecondary} style={{marginRight: spacing.xs}}/>
+                                    <Text style={styles.secondaryActionButtonText}>Poprzedni</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.secondaryActionButton, (!activeCategory || !activeWeight || upcomingAthletesForCurrentRound.length === 0 || isSaving || timerActive || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                    onPress={handleNextCompetitor}
+                                    disabled={!activeCategory || !activeWeight || upcomingAthletesForCurrentRound.length === 0 || isSaving || timerActive || showAttemptAnimation}
+                                >
+                                    <Text style={styles.secondaryActionButtonText}>Następny</Text>
+                                    <AntDesign name="right" size={16} color={colors.textOnSecondary} style={{marginLeft: spacing.xs}}/>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        {/* Grupa przycisków Nawigacji Rund */}
+                        <View style={styles.judgeButtonGroup}>
+                            <Text style={styles.judgeSectionTitle}>Nawigacja Rund</Text>
+                            <View style={styles.judgeButtonRow}>
+                                <TouchableOpacity
+                                    style={[styles.secondaryActionButton, (currentRound === 1 || isSaving || timerActive || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                    onPress={handlePreviousRound}
+                                    disabled={currentRound === 1 || isSaving || timerActive || showAttemptAnimation}
+                                >
+                                    <AntDesign name="doubleleft" size={16} color={colors.textOnSecondary} style={{marginRight: spacing.xs}}/>
+                                    <Text style={styles.secondaryActionButtonText}>Poprz. Runda</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.secondaryActionButton, (currentRound === 3 || isSaving || timerActive || showAttemptAnimation) && styles.actionButtonDisabled, {flex:1}]}
+                                    onPress={handleNextRound}
+                                    disabled={currentRound === 3 || isSaving || timerActive || showAttemptAnimation}
+                                >
+                                    <Text style={styles.secondaryActionButtonText}>Nast. Runda</Text>
+                                    <AntDesign name="doubleright" size={16} color={colors.textOnSecondary} style={{marginLeft: spacing.xs}}/>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                        {/* NOWA GRUPA: Sterowanie Widownią */}
+                        <View style={styles.judgeButtonGroup}>
+                            <Text style={styles.judgeSectionTitle}>Sterowanie Widownią</Text>
+                            <TouchableOpacity
+                                style={[styles.secondaryActionButton, {backgroundColor: colors.info, width: '100%'}]}
+                                onPress={() => {
+                                    setIsResultsModalVisible(true);
+                                }}
+                                disabled={isSaving || timerActive || showAttemptAnimation}
+                            >
+                                <MaterialCommunityIcons name="poll" size={18} color={colors.textLight} style={{marginRight: spacing.sm}}/>
+                                <Text style={[styles.secondaryActionButtonText, {color: colors.textLight}]}>Pokaż Wyniki Końcowe</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+              </View>
+            </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
+      <Footer
+        competitionLocation={zawody.miejsce}
+        registeredAthletesCount={zawodnicy.length}
+        totalWeightInCategory={totalLiftedInCategory}
+      />
 
-      <Footer />
-    </ScrollView>
+      {showAttemptAnimation && ( // Animacja na ekranie sędziego
+        <View style={styles.animationOverlayContainer}>
+            <AttemptResultAnimation success={attemptAnimationSuccess} />
+        </View>
+      )}
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={isResultsModalVisible}
+        onRequestClose={() => setIsResultsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Pokaż Wyniki na Ekranie Widowni</Text>
+            <OptionSelector
+              label="Wybierz Kategorię"
+              options={modalCategoryOptions}
+              selectedValue={modalSelectedCategory}
+              onSelect={(val) => {
+                setModalSelectedCategory(val);
+                const catObj = kategorie.find(k => k.nazwa === val);
+                setModalSelectedWeight(catObj && catObj.wagi.length > 0 ? catObj.wagi[0] : null);
+              }}
+              disabled={isSaving}
+            />
+            {modalSelectedCategory && (
+              <OptionSelector
+                label="Wybierz Wagę"
+                options={modalWeightOptions}
+                selectedValue={modalSelectedWeight}
+                onSelect={setModalSelectedWeight}
+                disabled={!modalSelectedCategory || modalWeightOptions.length === 0 || isSaving}
+              />
+            )}
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => setIsResultsModalVisible(false)}
+              >
+                <Text style={[styles.modalButtonText, styles.modalButtonTextCancel]}>Anuluj</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm, (!modalSelectedCategory || !modalSelectedWeight) && styles.actionButtonDisabled]}
+                onPress={handleShowResultsOnAthleteView}
+                disabled={!modalSelectedCategory || !modalSelectedWeight || isSaving}
+              >
+                <Text style={styles.modalButtonText}>Pokaż</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
-
-// --- Style ---
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    contentContainer: { flexGrow: 1 },
-    headerBackground: { paddingTop: spacing.xl, ...shadows.medium },
-    headerBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: '5%', width: '100%', marginBottom: spacing.lg },
-    headerSideContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 100 },
-    headerRightAlign: { justifyContent: 'flex-end' },
-    headerClubLogo: { marginRight: spacing.sm, borderRadius: borderRadius.sm },
-    headerLocationDate: {},
-    headerLocationText: { fontSize: font.sizes.xs, color: colors.textLight, fontWeight: font.weights.medium },
-    headerDateText: { fontSize: font.sizes.xs, color: colors.textLight + 'aa' },
-    headerLogo: { fontSize: font.sizes['3xl'], fontWeight: font.weights.bold, color: colors.textMainTitle, fontFamily: font.family, letterSpacing: 1, textAlign: 'center', marginHorizontal: spacing.md },
-    headerJudgeInfo: { alignItems: 'flex-end', marginRight: spacing.sm },
-    headerJudgeName: { fontSize: font.sizes.xs, color: colors.textLight, fontWeight: font.weights.medium },
-    headerJudgeAvatar: { width: 32, height: 32, borderRadius: borderRadius.full, resizeMode: 'cover' },
-    mainContent: { flex: 1, padding: spacing.lg },
-    mainTitle: { fontSize: font.sizes['2xl'], fontWeight: font.weights.bold, color: colors.text, textAlign: 'center', marginBottom: spacing.lg },
-    columnsContainer: { flexDirection: 'row', gap: spacing.lg },
-    leftColumn: { flex: 1, gap: spacing.lg },
-    rightColumn: { flex: 1, gap: spacing.lg },
-    card: { backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.lg, ...shadows.small },
-    columnTitle: { fontSize: font.sizes.xl, fontWeight: font.weights.semibold, color: colors.primary, marginBottom: spacing.md, textAlign: 'center' },
-
-    // Style dla OptionSelector
-    selectorContainer: { marginBottom: spacing.md },
-    selectorLabel: { fontSize: font.sizes.sm, fontWeight: font.weights.medium, color: colors.textSecondary, marginBottom: spacing.xs },
-    selectorScroll: { flexDirection: 'row' },
-    selectorOption: {
-        paddingVertical: spacing.xs, paddingHorizontal: spacing.md,
-        backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.full,
-        marginRight: spacing.sm, borderWidth: 1, borderColor: colors.border,
-        flexDirection: 'row', alignItems: 'center',
-    },
-    selectorOptionActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    selectorOptionText: { color: colors.text, fontWeight: font.weights.medium, fontSize: font.sizes.sm },
-    selectorOptionTextActive: { color: colors.textLight },
-    selectorLoading: { alignSelf: 'flex-start', marginLeft: spacing.md },
-    selectorEmpty: { color: colors.textSecondary, fontStyle: 'italic', marginLeft: spacing.md },
-    selectorOptionCompleted: {
-        backgroundColor: colors.surfaceVariant + '99', opacity: 0.7, borderColor: colors.success + '80',
-    },
-    selectorOptionTextCompleted: {
-        // color: colors.textSecondary,
-    },
-    selectorCompletedIcon: {
-        marginLeft: spacing.xs,
-    },
-
-    // Style dla AthleteList
-    athleteListContainer: { marginTop: spacing.md },
-    subHeader: { fontSize: font.sizes.md, fontWeight: font.weights.semibold, color: colors.textSecondary, marginBottom: spacing.sm },
-    emptyText: { color: colors.textSecondary, fontStyle: 'italic', textAlign: 'center', marginTop: spacing.md },
-    athleteScroll: { maxHeight: 200, borderWidth: 1, borderColor: colors.borderLight, borderRadius: borderRadius.md },
-    athleteListItem: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.borderLight, backgroundColor: colors.surface },
-    athleteListItemActive: { backgroundColor: colors.primary + '20', borderLeftWidth: 4, borderLeftColor: colors.primary, paddingLeft: spacing.md - 4 },
-    athleteListText: { fontSize: font.sizes.sm, color: colors.text, flex: 1, marginRight: spacing.sm },
-    athleteListAttempt1: { fontSize: font.sizes.xs, color: colors.textSecondary },
-    athleteListItemCompleted: { backgroundColor: colors.surfaceVariant + '99', opacity: 0.7 },
-    athleteListItemContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 },
-    athleteListTextCompleted: { /* Opcjonalne style */ },
-    completedIcon: { marginLeft: spacing.sm }, // Dodano margines dla ikony ukończenia w liście
-
-    // Style dla CurrentAthleteManager
-    currentAthleteContainer: { alignItems: 'center' },
-    currentAthleteName: { fontSize: font.sizes.lg, fontWeight: font.weights.bold, color: colors.primary, marginBottom: spacing.xs },
-    currentAthleteClub: { fontSize: font.sizes.sm, color: colors.textSecondary, marginBottom: spacing.md },
-    attemptsContainer: { width: '100%', gap: spacing.sm },
-    attemptBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.background, padding: spacing.sm, borderRadius: borderRadius.md, borderWidth: 1, borderColor: colors.border },
-    attemptBoxActive: { borderColor: colors.primary, borderWidth: 2 },
-    attemptLabel: { fontSize: font.sizes.sm, color: colors.textSecondary, width: '25%' },
-    attemptWeight: { fontSize: font.sizes.md, fontWeight: font.weights.semibold, color: colors.text, width: '20%', textAlign: 'center' },
-    attemptWeightInput: { fontSize: font.sizes.md, fontWeight: font.weights.semibold, color: colors.text, width: '20%', textAlign: 'center', borderBottomWidth: 1, borderColor: colors.primary, paddingVertical: Platform.OS === 'ios' ? spacing.xs : 0 },
-    attemptStatusIcon: { width: '15%', alignItems: 'center' },
-    attemptActions: { flexDirection: 'row', gap: spacing.xs, width: '40%', justifyContent: 'flex-end' },
-    actionButton: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, borderRadius: borderRadius.sm, alignItems: 'center', justifyContent: 'center', minWidth: 60 },
-    actionButtonDisabled: { backgroundColor: colors.border, opacity: 0.7 },
-    passButton: { backgroundColor: colors.success },
-    failButton: { backgroundColor: colors.error },
-    actionButtonText: { color: colors.textLight, fontSize: font.sizes.xs, fontWeight: font.weights.medium },
-
-    // Style dla Timera i Zarządzania
-    timerContainer: { alignItems: 'center', marginBottom: spacing.lg },
-    timerText: { fontSize: font.sizes['5xl'], fontWeight: font.weights.bold, color: colors.primary },
-    timerWarning: { color: colors.warning },
-    timerFinished: { color: colors.error },
-    currentStatusInfo: { alignItems: 'center', marginBottom: spacing.lg, padding: spacing.md, backgroundColor: colors.surfaceVariant, borderRadius: borderRadius.md },
-    currentStatusLabel: { fontSize: font.sizes.sm, color: colors.textSecondary, marginBottom: spacing.xs },
-    currentStatusText: { fontSize: font.sizes.md, color: colors.text, textAlign: 'center' },
-    mainActionButtons: { gap: spacing.md, alignItems: 'stretch' },
-    mainActionButton: { paddingVertical: spacing.md, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-    startButton: { backgroundColor: colors.primary },
-    stopButton: { backgroundColor: colors.warning },
-    mainActionButtonText: { color: colors.textLight, fontSize: font.sizes.md, fontWeight: font.weights.semibold },
-});

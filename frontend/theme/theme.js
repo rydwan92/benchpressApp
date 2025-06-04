@@ -6,6 +6,7 @@ export const colors = {
   
   // Tła i powierzchnie
   background: '#F3F4F6',  // Jasnoszary
+  backgroundDark: '#1E293B', 
   surface: '#FFFFFF',     // Biała powierzchnia
   card: '#F9FAFB',        // Tło kart
   
@@ -14,13 +15,21 @@ export const colors = {
   textSecondary: '#64748B', // Drugorzędny tekst
   textLight: '#FFFFFF',    // Jasny tekst
   textMainTitle: 'white',     // biały
-  textComponentTitle: '#1E293B', // Zmieniono 'black' na główny kolor tekstu dla spójności, można dostosować
+  textComponentTitle: '#1E293B', 
+  textSecondaryLight: '#FFFFFFaa', // DODANO: Półprzezroczysty biały
+
   // Stany
   success: '#10B981',     // Zielony
   error: '#EF4444',       // Czerwony
   warning: '#FBBF24',     // Żółty
   info: '#3B82F6',        // Niebieski informacyjny
-  
+
+  // Kolory medali
+  gold: '#FFD700',        // DODANO: Złoty
+  silver: '#C0C0C0',      // DODANO: Srebrny
+  bronze: '#CD7F32',      // DODANO: Brązowy
+  goldDark: '#B8860B',     // DODANO: Ciemniejszy złoty dla tekstu
+
   // Obramowania
   border: '#E5E7EB',
   
@@ -37,6 +46,10 @@ export const colors = {
     start: '#2563EB',
     end: '#1E40AF',
   },
+
+  // Dodatkowe kolory do categoryweightmanager
+  white: '#FFFFFF',
+  blueForCounter: '#007AFF', // Przykład niebieskiego
 };
 
 export const font = {
@@ -61,6 +74,7 @@ export const font = {
 };
 
 export const spacing = {
+  xxs: 2, // DODANO
   xs: 4,
   sm: 8,
   md: 16,
@@ -110,6 +124,22 @@ export const shadows = {
   },
 };
 
+// Definiujemy bazowe style dla przycisków jako pierwsze
+const buttonBaseStyle = {
+  paddingVertical: spacing.sm,
+  paddingHorizontal: spacing.md,
+  borderRadius: borderRadius.md,
+  alignItems: 'center',
+  justifyContent: 'center',
+  ...shadows.small,
+};
+
+const buttonTextStyle = {
+  color: colors.textLight,
+  fontSize: font.sizes.base,
+  fontWeight: font.weights.semibold,
+};
+
 // Komponenty stylistyczne wielokrotnego użytku
 export const componentStyles = {
   // Kontenery
@@ -119,17 +149,9 @@ export const componentStyles = {
     padding: spacing.lg,
     ...shadows.small,
   },
-  
   // Przyciski
   button: {
-    base: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: borderRadius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...shadows.small,
-    },
+    base: buttonBaseStyle, // Użycie zdefiniowanej stałej
     primary: {
       backgroundColor: colors.button.primary,
     },
@@ -142,11 +164,7 @@ export const componentStyles = {
     disabled: {
       backgroundColor: colors.button.disabled,
     },
-    text: {
-      color: colors.textLight,
-      fontSize: font.sizes.base,
-      fontWeight: font.weights.semibold,
-    },
+    text: buttonTextStyle, // Użycie zdefiniowanej stałej
   },
   
   // Formularze
@@ -185,6 +203,15 @@ export const componentStyles = {
     marginBottom: spacing.lg, // Zwiększono margines dolny
     textAlign: 'center',
   },
+  // NOWY STYL DLA COMPETITION SCREEN
+  competitionComponentTitle: { // Punkt 6
+    fontSize: font.sizes.lg, // Nieco mniejszy niż główny componentTitle
+    fontWeight: font.weights.bold,
+    color: colors.text, // Standardowy kolor tekstu
+    fontFamily: font.family,
+    marginBottom: spacing.md,
+    textAlign: 'center', // Punkt 1, 5
+  },
 
   componentSubtitle: { // Pozostaje bez zmian
     fontSize: font.sizes.base,
@@ -216,6 +243,30 @@ export const componentStyles = {
       color: colors.text,
       fontWeight: font.weights.medium,
       textAlign: 'center',
+    },
+  },
+  // Wspólne style dla przycisków w modalach
+  modalButton: {
+    base: {
+      ...buttonBaseStyle, // Użycie zdefiniowanej stałej
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      minWidth: 120,
+      marginHorizontal: spacing.xs,
+    },
+    text: {
+      ...buttonTextStyle, // Użycie zdefiniowanej stałej
+      fontSize: font.sizes.sm,
+      fontWeight: font.weights.medium,
+    },
+    confirmButton: {
+      backgroundColor: colors.primary,
+    },
+    cancelButton: {
+      backgroundColor: colors.textSecondary,
+    },
+    deleteButton: {
+      backgroundColor: colors.error,
     },
   },
 };

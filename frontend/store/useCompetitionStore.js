@@ -1,250 +1,282 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { v4 as uuidv4 } from 'uuid';
 
-// Helper do głębokiego porównywania, aby unikać niepotrzebnych re-renderów przy persist
-const deepCompare = (objA, objB) => JSON.stringify(objA) === JSON.stringify(objB);
+let storageMechanism;
 
-export const useCompetitionStore = create(devtools(persist((set, get) => ({
-  // --- Stan Aplikacji ---
-  zawody: {
-    nazwa: 'Benchpress Cup 2025',
-    miejsce: '',
-    data: new Date().toISOString().slice(0, 10),
-    sedzia: {
-      imie: '',
-      nazwisko: '',
-      avatar: null,
-    },
-    klubAvatar: null,
-  },
-  kategorie: [],
-  zawodnicy: [],
+if (Platform.OS === 'web') {
+  storageMechanism = {
+    getItem: async (name) => localStorage.getItem(name),
+    setItem: async (name, value) => localStorage.setItem(name, value),
+    removeItem: async (name) => localStorage.removeItem(name),
+  };
+} else {
+  storageMechanism = AsyncStorage;
+}
 
-  // --- Stan Interfejsu Użytkownika (UI State) ---
-  activeCategory: null,
-  activeWeight: null,
-  activeAthleteOriginalIndex: null, // Indeks w oryginalnej tablicy 'zawodnicy'
-  activeAttemptNr: 1,
-  timerActive: false,
-  timerTimeLeft: 60, // Domyślny czas na podejście
-  // --- START ZMIANY: Dodaj pole na instancję socketu ---
-  socket: null, // Przechowa instancję socket.io
-  // --- KONIEC ZMIANY ---
+// A simple deep equality check using JSON.stringify.
+// Note: This has limitations (e.g., order of keys in objects, undefined values, functions).
+// For more robust deep equality, consider a library like lodash.isEqual.
+const simpleDeepEqual = (obj1, obj2) => {
+  if (typeof obj1 !== 'object' || obj1 === null || typeof obj2 !== 'object' || obj2 === null) {
+    return obj1 === obj2;
+  }
+  // Fallback for complex objects or when order might matter and for a quick check.
+  // Be cautious with this method for complex scenarios.
+  try {
+    return JSON.stringify(obj1) === JSON.stringify(obj2);
+  } catch (e) {
+    return false; // If stringify fails (e.g. circular structures, though not expected here)
+  }
+};
 
-  // --- Akcje ---
+const useCompetitionStore = create(
+  persist(
+    (set, get) => ({
+      zawody: {
+        nazwa: 'Ławka Cup',
+        miejsce: '',
+        data: new Date().toISOString().slice(0, 10),
+        sedzia: { imie: '', nazwisko: '', avatar: null },
+        klubAvatar: null,
+      },
+      kategorie: [],
+      zawodnicy: [],
+      activeCategory: null,
+      activeWeight: null,
+      activeAthleteOriginalIndex: null,
+      activeAttemptNr: 1,
+      currentRound: 1,
+      timerActive: false,
+      timerTimeLeft: 60,
+      socket: null,
+      attemptResultForAnimation: null,
 
-  // Ustawienia ogólne zawodów
-  setZawody: (zawody) => set(state => ({ zawody: { ...state.zawody, ...zawody } }), false, 'setZawody'),
-  setSedzia: (sedzia) => set(state => ({ zawody: { ...state.zawody, sedzia: { ...state.zawody.sedzia, ...sedzia } } }), false, 'setSedzia'),
-  setKlubAvatar: (avatar) => set(state => ({ zawody: { ...state.zawody, klubAvatar: avatar } }), false, 'setKlubAvatar'),
+      setInitialData: (data) => {
+        console.log('[Store] setInitialData triggered. Context:', Platform.OS, 'Incoming data keys:', Object.keys(data).join(', '));
+        // Logowanie specyficznych pól, które są problematyczne
+        console.log('[Store] Incoming data for animation/timer:', JSON.stringify({
+          timerActive: data.timerActive,
+          timerTimeLeft: data.timerTimeLeft,
+          attemptResultForAnimation: data.attemptResultForAnimation,
+          activeAthleteOriginalIndex: data.activeAthleteOriginalIndex
+        }, null, 2));
 
-  // Zarządzanie kategoriami i wagami
-  addKategoria: (nazwa) => set(state => ({
-    kategorie: [...state.kategorie, { nazwa, wagi: [] }]
-  }), false, 'addKategoria'),
-  addWaga: (kategoriaNazwa, waga) => set(state => ({
-    kategorie: state.kategorie.map(k =>
-      k.nazwa === kategoriaNazwa ? { ...k, wagi: [...k.wagi, waga].sort((a, b) => Number(a) - Number(b)) } : k
-    )
-  }), false, 'addWaga'),
-  removeKategoria: (nazwa) => set(state => ({
-    kategorie: state.kategorie.filter(k => k.nazwa !== nazwa)
-  }), false, 'removeKategoria'),
-  removeWaga: (kategoriaNazwa, waga) => set(state => ({
-    kategorie: state.kategorie.map(k =>
-      k.nazwa === kategoriaNazwa
-        ? { ...k, wagi: k.wagi.filter(w => w !== waga) }
-        : k
-    )
-  }), false, 'removeWaga'),
+        const currentState = get();
+        console.log('[Store] Current state BEFORE update for animation/timer:', JSON.stringify({
+          timerActive: currentState.timerActive,
+          timerTimeLeft: currentState.timerTimeLeft,
+          attemptResultForAnimation: currentState.attemptResultForAnimation,
+          activeAthleteOriginalIndex: currentState.activeAthleteOriginalIndex
+        }, null, 2));
 
-  // Zarządzanie zawodnikami
-  addZawodnik: (zawodnik) => set(state => ({
-    zawodnicy: [
-      ...state.zawodnicy,
-      {
-        ...zawodnik,
-        podejscie1: zawodnik.podejscie1 || '',
-        podejscie2: zawodnik.podejscie2 || '',
-        podejscie3: zawodnik.podejscie3 || '',
-        podejscie1Status: null,
-        podejscie2Status: null,
-        podejscie3Status: null,
-      }
-    ]
-  }), false, 'addZawodnik'),
-  removeZawodnik: (index) => set(state => ({
-    zawodnicy: state.zawodnicy.filter((_, i) => i !== index)
-  }), false, 'removeZawodnik'),
-  updateZawodnik: (index, updatedData) => set(state => ({
-    zawodnicy: state.zawodnicy.map((zawodnik, i) =>
-      i === index ? { ...zawodnik, ...updatedData } : zawodnik
-    )
-  }), false, 'updateZawodnik'),
+        const updates = {};
+        let changed = false;
 
-  // Zarządzanie podejściami
-  updatePodejscieWaga: (zawodnikIndex, nrPodejscia, waga) => set(state => ({
-    zawodnicy: state.zawodnicy.map((z, i) =>
-      i === zawodnikIndex ? { ...z, [`podejscie${nrPodejscia}`]: waga } : z
-    )
-  }), false, 'updatePodejscieWaga'),
-  updatePodejscieStatus: (zawodnikIndex, nrPodejscia, status) => set(state => ({
-    zawodnicy: state.zawodnicy.map((z, i) =>
-      i === zawodnikIndex ? { ...z, [`podejscie${nrPodejscia}Status`]: status } : z
-    )
-  }), false, 'updatePodejscieStatus'),
+        const addUpdate = (key, newValue, oldValue, isDeep = false) => {
+          const comparisonFn = isDeep ? simpleDeepEqual : (a, b) => a === b;
+          
+          if (data.hasOwnProperty(key)) {
+            if (!comparisonFn(oldValue, newValue)) {
+              updates[key] = newValue;
+              changed = true;
+              console.log(`[Store] CHANGE DETECTED for key: "${key}". Old:`, JSON.stringify(oldValue), "New:", JSON.stringify(newValue));
+            } else {
+              if (['timerActive', 'timerTimeLeft', 'attemptResultForAnimation', 'activeAthleteOriginalIndex'].includes(key)) {
+                console.log(`[Store] NO CHANGE by comparison for key: "${key}". Old:`, JSON.stringify(oldValue), "New:", JSON.stringify(newValue), "Equals:", comparisonFn(oldValue, newValue));
+              }
+            }
+          }
+        };
 
-  // --- Inicjalizacja i Synchronizacja Danych ---
-  setInitialData: (data) => {
-    console.time('setInitialDataAction'); // <<< START POMIARU akcji
-    console.log('[Store] setInitialData received:', data ? `Zawody: ${data.zawody?.nazwa}, Kat: ${data.kategorie?.length}, Zaw: ${data.zawodnicy?.length}, ActiveCat: ${data.activeCategory}, ActiveW: ${data.activeWeight}, ActiveIdx: ${data.activeAthleteOriginalIndex}, AttemptNr: ${data.activeAttemptNr}, Timer: ${data.timerActive}, TimeLeft: ${data.timerTimeLeft}` : 'null data');
+        // Core competition data
+        addUpdate('zawody', data.zawody, currentState.zawody, true);
+        addUpdate('kategorie', data.kategorie, currentState.kategorie, true);
+        addUpdate('zawodnicy', data.zawodnicy, currentState.zawodnicy, true);
+        
+        // Active state
+        addUpdate('activeCategory', data.activeCategory, currentState.activeCategory);
+        addUpdate('activeWeight', data.activeWeight, currentState.activeWeight);
+        addUpdate('activeAthleteOriginalIndex', data.activeAthleteOriginalIndex, currentState.activeAthleteOriginalIndex);
+        addUpdate('activeAttemptNr', data.activeAttemptNr, currentState.activeAttemptNr);
+        addUpdate('currentRound', data.currentRound, currentState.currentRound);
+        
+        // Timer state - CRITICAL for audience screen
+        addUpdate('timerActive', data.timerActive, currentState.timerActive);
+        addUpdate('timerTimeLeft', data.timerTimeLeft, currentState.timerTimeLeft);
+        // Animation state - CRITICAL for audience screen
+        addUpdate('attemptResultForAnimation', data.attemptResultForAnimation, currentState.attemptResultForAnimation, true);
 
-    if (!data) {
-        console.warn('[Store] setInitialData received null or undefined data. Skipping update.');
-        console.timeEnd('setInitialDataAction'); // <<< KONIEC POMIARU (w razie błędu/braku danych)
-        return;
-    }
-
-    // Logowanie wartości, które zostaną zastosowane
-    console.log('[Store] Applying state:', {
-        zawody: data.zawody !== undefined,
-        kategorie: data.kategorie !== undefined,
-        zawodnicy: data.zawodnicy !== undefined,
-        activeCategory: data.activeCategory,
-        activeWeight: data.activeWeight,
-        activeAthleteOriginalIndex: data.activeAthleteOriginalIndex,
-        activeAttemptNr: data.activeAttemptNr,
-        timerActive: data.timerActive,
-        timerTimeLeft: data.timerTimeLeft
-    });
-
-    // Użyj `set` do aktualizacji stanu.
-    set({
-      zawody: data.zawody !== undefined ? data.zawody : get().zawody,
-      kategorie: data.kategorie !== undefined ? data.kategorie : get().kategorie,
-      zawodnicy: data.zawodnicy !== undefined ? data.zawodnicy : get().zawodnicy,
-      // Stan UI - zawsze bierz z przychodzących danych `data`, jeśli istnieją
-      activeCategory: data.activeCategory !== undefined ? data.activeCategory : null,
-      activeWeight: data.activeWeight !== undefined ? data.activeWeight : null,
-      activeAthleteOriginalIndex: data.activeAthleteOriginalIndex !== undefined ? data.activeAthleteOriginalIndex : null,
-      activeAttemptNr: data.activeAttemptNr !== undefined ? data.activeAttemptNr : 1,
-      timerActive: data.timerActive !== undefined ? data.timerActive : false,
-      timerTimeLeft: data.timerTimeLeft !== undefined ? data.timerTimeLeft : 60,
-    }, false, 'setInitialData');
-
-    // Logowanie stanu PO aktualizacji (opcjonalne)
-    setTimeout(() => {
-        const newState = get();
-        console.log('[Store] State AFTER setInitialData:', `ActiveCat: ${newState.activeCategory}, ActiveW: ${newState.activeWeight}, ActiveIdx: ${newState.activeAthleteOriginalIndex}, AttemptNr: ${newState.activeAttemptNr}, Timer: ${newState.timerActive}, TimeLeft: ${newState.timerTimeLeft}`);
-    }, 0);
-
-    console.timeEnd('setInitialDataAction'); // <<< KONIEC POMIARU akcji
-  },
-
-  // --- Akcje dla Aktywnego Kontekstu Zawodów ---
-  setActiveGroup: (category, weight) => set({
-    activeCategory: category,
-    activeWeight: weight,
-    activeAthleteOriginalIndex: null, // Resetuj zawodnika przy zmianie grupy
-    activeAttemptNr: 1,
-    timerActive: false,
-    timerTimeLeft: 60,
-  }, false, 'setActiveGroup'),
-
-  setActiveAthlete: (originalIndex) => {
-    console.log(`[Store] setActiveAthlete called with originalIndex: ${originalIndex}`);
-    set((state) => {
-      const athlete = originalIndex !== null && state.zawodnicy ? state.zawodnicy[originalIndex] : null;
-      let attemptNr = 1;
-      if (athlete) {
-        // Znajdź pierwsze nieocenione podejście
-        if (athlete.podejscie1Status !== null) attemptNr = 2;
-        if (athlete.podejscie2Status !== null) attemptNr = 3;
-        // Jeśli wszystkie ocenione, można wrócić do 1 lub ustawić specjalny status
-        if (athlete.podejscie3Status !== null) attemptNr = 1; // Lub np. 4, jeśli chcesz oznaczyć koniec
-      }
-      console.log(`[Store] Setting activeAthleteOriginalIndex: ${originalIndex}, activeAttemptNr: ${attemptNr}`);
-      return {
-        activeAthleteOriginalIndex: originalIndex,
-        activeAttemptNr: attemptNr,
-        timerActive: false, // Zawsze resetuj timer przy zmianie zawodnika
-        timerTimeLeft: 60,
-      };
-    }, false, 'setActiveAthlete');
-  },
-
-  setActiveAttemptNr: (nr) => set({
-    activeAttemptNr: nr,
-    timerActive: false, // Resetuj timer przy ręcznej zmianie podejścia
-    timerTimeLeft: 60,
-  }, false, 'setActiveAttemptNr'),
-
-  // Zarządzanie Timerem
-  setTimerActive: (isActive) => {
-    // --- DODAJ LOG PRZED ODCZYTEM ---
-    console.log('[Store] setTimerActive - Reading state. Current timerTimeLeft type:', typeof get().timerTimeLeft, 'Value:', get().timerTimeLeft);
-    // --- KONIEC LOGU ---
-    const currentTime = get().timerTimeLeft;
-    console.log(`[Store] setTimerActive called with isActive: ${isActive}, currentTime: ${currentTime}`);
-    const isValidTime = typeof currentTime === 'number' && !isNaN(currentTime);
-    let nextTimeLeft = currentTime;
-    if (!isValidTime) {
-        console.warn(`[Store] setTimerActive: currentTime (${currentTime}) is invalid. Resetting to 60.`);
-        nextTimeLeft = 60;
-    } else if (isActive && currentTime <= 0) {
-        nextTimeLeft = 60;
-    }
-    set({
-        timerActive: isActive,
-        timerTimeLeft: nextTimeLeft
-    }, false, 'setTimerActive');
-  },
-
-  setTimerTimeLeft: (timeOrFn) => {
-    // --- START ZMIANY: Logowanie i Zabezpieczenie ---
-    let finalTime;
-    if (typeof timeOrFn === 'function') {
-        const prevState = get().timerTimeLeft;
-        // Upewnij się, że prevState jest liczbą przed wywołaniem funkcji
-        const validPrevState = typeof prevState === 'number' && !isNaN(prevState) ? prevState : 60;
-        console.log(`[Store] setTimerTimeLeft called with FUNCTION. Applying to prev state: ${validPrevState}`);
-        try {
-            finalTime = timeOrFn(validPrevState); // Wykonaj funkcję
-            console.log(`[Store] setTimerTimeLeft - Function result: ${finalTime}`);
-        } catch (e) {
-            console.error("[Store] setTimerTimeLeft - Error executing time function:", e);
-            finalTime = validPrevState; // W razie błędu, zachowaj poprzedni stan
+        if (changed) {
+          console.log('[Store] Applying changes. Keys being updated:', Object.keys(updates).join(', '));
+          console.log('[Store] Full updates object:', JSON.stringify(updates, null, 2));
+          set(state => ({ ...state, ...updates }), false, 'setInitialDataSelective');
+        } else {
+          console.log('[Store] No actual changes detected by comparison overall. Skipping update.');
         }
-    } else {
-        finalTime = timeOrFn; // Użyj wartości bezpośrednio
-        console.log(`[Store] setTimerTimeLeft called with VALUE: ${finalTime}`);
+      },
+      
+      setSocket: (socketInstance) => set({ socket: socketInstance }, false, 'setSocket'),
+      
+      setZawody: (updatedZawodyData) => {
+        set(state => ({
+          zawody: { ...state.zawody, ...updatedZawodyData }
+        }), false, 'setZawody');
+      },
+
+      addZawodnik: (nowyZawodnik) => {
+        set(state => {
+          const newAthleteData = {
+            ...nowyZawodnik,
+            originalIndex: uuidv4(),
+            podejscie1: nowyZawodnik.podejscie1 || '',
+            podejscie2: nowyZawodnik.podejscie2 || '',
+            podejscie3: nowyZawodnik.podejscie3 || '',
+            podejscie1Status: null,
+            podejscie2Status: null,
+            podejscie3Status: null,
+            kategoria: nowyZawodnik.kategoria || state.activeCategory || '',
+            waga: nowyZawodnik.waga || state.activeWeight || '',
+          };
+          return { zawodnicy: [...state.zawodnicy, newAthleteData] };
+        }, false, 'addZawodnik');
+      },
+      updateZawodnik: (athleteUniqueId, updatedData) => {
+        set(state => ({
+          zawodnicy: state.zawodnicy.map(zawodnik =>
+            zawodnik.originalIndex === athleteUniqueId
+              ? { ...zawodnik, ...updatedData }
+              : zawodnik
+          )
+        }), false, 'updateZawodnik');
+      },
+      removeZawodnik: (athleteUniqueIdToRemove) => {
+        set(state => {
+          const newZawodnicy = state.zawodnicy.filter(
+            zawodnik => zawodnik.originalIndex !== athleteUniqueIdToRemove
+          );
+          let newActiveAthleteOriginalIndex = state.activeAthleteOriginalIndex;
+          if (state.activeAthleteOriginalIndex === athleteUniqueIdToRemove) {
+            newActiveAthleteOriginalIndex = null;
+          }
+          return {
+            zawodnicy: newZawodnicy,
+            activeAthleteOriginalIndex: newActiveAthleteOriginalIndex
+          };
+        }, false, 'removeZawodnik');
+      },
+      addKategoria: (nazwaKategorii) => {
+        set(state => {
+          if (state.kategorie.find(k => k.nazwa === nazwaKategorii)) {
+            return state;
+          }
+          return {
+            kategorie: [...state.kategorie, { nazwa: nazwaKategorii, wagi: [] }]
+          };
+        }, false, 'addKategoria');
+      },
+      removeKategoria: (nazwaKategorii) => {
+        set(state => ({
+          kategorie: state.kategorie.filter(k => k.nazwa !== nazwaKategorii),
+          zawodnicy: state.zawodnicy.filter(z => z.kategoria !== nazwaKategorii),
+          activeCategory: state.activeCategory === nazwaKategorii ? null : state.activeCategory,
+          activeWeight: state.activeCategory === nazwaKategorii ? null : state.activeWeight,
+        }), false, 'removeKategoria');
+      },
+      addWaga: (nazwaKategorii, waga) => {
+        set(state => {
+          const newKategorie = state.kategorie.map(k => {
+            if (k.nazwa === nazwaKategorii) {
+              if (k.wagi.includes(waga)) return k; 
+              return { ...k, wagi: [...k.wagi, waga].sort((a, b) => parseFloat(a) - parseFloat(b)) };
+            }
+            return k;
+          });
+          return { kategorie: newKategorie };
+        }, false, 'addWaga');
+      },
+      removeWaga: (nazwaKategorii, waga) => {
+        set(state => {
+          const newKategorie = state.kategorie.map(k => {
+            if (k.nazwa === nazwaKategorii) {
+              return { ...k, wagi: k.wagi.filter(w => w !== waga) };
+            }
+            return k;
+          });
+          return {
+            kategorie: newKategorie,
+            zawodnicy: state.zawodnicy.filter(z => !(z.kategoria === nazwaKategorii && z.waga === waga)),
+            activeWeight: (state.activeCategory === nazwaKategorii && state.activeWeight === waga) ? null : state.activeWeight,
+          };
+        }, false, 'removeWaga');
+      },
+      updatePodejscieWaga: (athleteUniqueId, attemptNo, weight) => {
+        set(state => ({
+          zawodnicy: state.zawodnicy.map(zawodnik =>
+            zawodnik.originalIndex === athleteUniqueId
+              ? { ...zawodnik, [`podejscie${attemptNo}`]: weight }
+              : zawodnik
+          )
+        }), false, 'updatePodejscieWaga');
+      },
+      updatePodejscieStatus: (athleteUniqueId, attemptNo, status) => {
+        set(state => ({
+          zawodnicy: state.zawodnicy.map(z =>
+            z.originalIndex === athleteUniqueId
+              ? { ...z, [`podejscie${attemptNo}Status`]: status }
+              : z
+          )
+        }), false, 'updatePodejscieStatus');
+      },
+      setActiveGroup: (category, weight) => {
+        console.log(`[Store] setActiveGroup: Category=${category}, Weight=${weight}`);
+        set({
+          activeCategory: category,
+          activeWeight: weight,
+          activeAthleteOriginalIndex: null,
+          currentRound: 1, 
+          activeAttemptNr: 1,
+        }, false, 'setActiveGroup');
+      },
+      setActiveAthlete: (athleteOriginalIndex) => {
+        console.log(`[Store] setActiveAthlete: ID=${athleteOriginalIndex}`);
+        set(state => ({
+          activeAthleteOriginalIndex: athleteOriginalIndex,
+          activeAttemptNr: state.currentRound, 
+        }), false, 'setActiveAthlete');
+      },
+      setCurrentRound: (round) => {
+        console.log(`[Store] setCurrentRound: Round=${round}`);
+        set({
+          currentRound: round,
+          activeAthleteOriginalIndex: null,
+          activeAttemptNr: round,
+        }, false, 'setCurrentRound');
+      },
+      setTimerActive: (isActive) => set({ timerActive: isActive }, false, 'setTimerActive'),
+      setTimerTimeLeft: (timeLeft) => set({ timerTimeLeft: timeLeft }, false, 'setTimerTimeLeft'),
+      
+      setAttemptResultForAnimation: (result) => {
+        console.log('[Store] setAttemptResultForAnimation called with:', result);
+        set({ attemptResultForAnimation: result }, false, 'setAttemptResultForAnimation');
+      },
+      clearAttemptResultForAnimation: () => {
+        console.log('[Store] clearAttemptResultForAnimation called.');
+        set({ attemptResultForAnimation: null }, false, 'clearAttemptResultForAnimation');
+      },
+    }),
+    {
+      name: 'competition-storage',
+      storage: createJSONStorage(() => storageMechanism),
+      partialize: (state) => {
+        const { socket, attemptResultForAnimation, ...rest } = state; // Do not persist socket
+        // Also, do not persist attemptResultForAnimation as it's transient
+        return rest;
+      },
     }
+  )
+);
 
-    // Dodatkowe sprawdzenie, czy wynik jest liczbą
-    if (typeof finalTime !== 'number' || isNaN(finalTime)) {
-        console.error(`[Store] setTimerTimeLeft - finalTime is NOT a valid number: ${finalTime}. Resetting to 60.`);
-        finalTime = 60; // Resetuj do wartości domyślnej w razie problemu
-    }
-
-    set({ timerTimeLeft: finalTime }, false, 'setTimerTimeLeft');
-    // --- KONIEC ZMIANY ---
-  },
-
-  // --- START ZMIANY: Dodaj akcję do ustawiania socketu ---
-  setSocket: (socketInstance) => set({ socket: socketInstance }, false, 'setSocket'),
-  // --- KONIEC ZMIANY ---
-
-}), // Koniec definicji store'u: (set, get) => ({...})
-{ // Początek obiektu opcji dla `persist`
-  name: 'competition-storage', // Nazwa klucza w localStorage/AsyncStorage
-  // Opcjonalnie: Określ, które części stanu mają być utrwalane
-  // partialize: (state) => ({ zawody: state.zawody, kategorie: state.kategorie, zawodnicy: state.zawodnicy }),
-  // Opcjonalnie: Użyj głębokiego porównania, aby unikać zapisu, jeśli obiekty się nie zmieniły
-  // equality: deepCompare,
-  // --- START ZMIANY: Wyklucz socket z persystencji ---
-  partialize: (state) => {
-    const { socket, ...rest } = state; // Wyklucz socket
-    return rest; // Utrwalaj resztę stanu
-  },
-  // --- KONIEC ZMIANY ---
-})));
+export default useCompetitionStore;

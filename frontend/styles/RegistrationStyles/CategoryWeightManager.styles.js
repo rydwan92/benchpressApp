@@ -1,21 +1,18 @@
 import { StyleSheet, Dimensions, Platform } from 'react-native';
 import { colors, font, spacing, borderRadius, shadows, componentStyles } from '../../theme/theme';
 
-const { width } = Dimensions.get('window');
-const containerPadding = spacing.md; // Główny padding kontenera
-const boxPadding = spacing.sm; // Padding wewnątrz kategorieBox
-const gapSize = spacing.md; // Odstęp między kafelkami
+const containerPadding = spacing.md;
+const gapSize = spacing.md;
 
-// Obliczanie szerokości dla kafelków (przykład dla 2 kolumn na większych ekranach)
-// Szerokość ekranu - padding kontenera * 2 - padding boxa * 2 - gap między kolumnami
-const availableWidth = width - containerPadding * 2 - boxPadding * 2 - gapSize;
-const tileWidthLarge = availableWidth / 2; // Szerokość dla 2 kolumn
+// Usunięto obliczenia szerokości kafelka oparte na screenWidth
 
 export default StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     padding: containerPadding,
+    borderRadius: borderRadius.lg,
+    overflow: 'hidden',
   },
   scrollContainer: {
     flex: 1,
@@ -24,9 +21,8 @@ export default StyleSheet.create({
     fontSize: font.sizes.xl,
     fontWeight: font.weights.bold,
     color: colors.text,
-    // Zwiększamy marginesy pionowe
-    marginTop: spacing.lg, // Dodaj margines górny (np. sm)
-    marginBottom: spacing.lg, // Zwiększ margines dolny (np. do lg)
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   actionRow: {
@@ -44,30 +40,20 @@ export default StyleSheet.create({
     paddingHorizontal: spacing.md,
     borderRadius: borderRadius.md,
     marginHorizontal: spacing.sm,
-    transition: 'transform 0.2s ease-in-out, background-color 0.2s ease-in-out', // Dodajemy płynne przejście dla web
-    ...shadows.small, // Dodajmy lekki cień
+    transition: 'transform 0.2s ease-in-out, background-color 0.2s ease-in-out',
+    ...shadows.small,
   },
-  actionBtnHover: { // Styl dla hover na przyciskach akcji (web)
-    transform: [{ scale: 1.05 }], // Lekkie powiększenie
-    // Można też lekko zmienić tło, np. rozjaśnić
-    // backgroundColor: lighten(colors.accent, 0.1), // Wymagałoby funkcji lighten
-    // Lub przyciemnić
-    // backgroundColor: darken(colors.accent, 0.1), // Wymagałoby funkcji darken
-    // Lub po prostu zwiększyć cień
+  actionBtnHover: {
+    transform: [{ scale: 1.05 }],
     ...shadows.medium,
   },
   actionBtnText: {
-    // Użyj dziedziczenia
     ...componentStyles.button.text,
     color: colors.textLight,
-    // Dostosuj rozmiar, jeśli przycisk ma być mniejszy
-    // fontSize: font.sizes.sm, // Jeśli celowo ma być mniejszy niż base
   },
   btnIcon: {
     marginRight: spacing.xs,
   },
-  
-  // Stan pustego komponentu
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -80,117 +66,107 @@ export default StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
-  
-  // Kafelki kategorii
   kategorieBox: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    // paddingHorizontal: boxPadding, // Dodajemy padding wewnątrz boxa
-    // paddingVertical: boxPadding,   // Dodajemy padding wewnątrz boxa
-    gap: gapSize, // Dodaje odstęp między kafelkami (zarówno w poziomie jak i pionie)
-    // Usuń justifyContent jeśli było, gap lepiej zarządza przestrzenią
+    gap: gapSize,
+    justifyContent: 'flex-start', // Or 'center' if you prefer items centered in the last row
+    width: '100%',
   },
-
   kategoriaTile: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     ...shadows.small,
-    // Ustaw domyślną szerokość - np. dla układu kolumnowego na większych ekranach
-    // Użyjemy calc() dla web, ale to może nie działać w RN.
-    // Bezpieczniejsza opcja to użycie flex lub minWidth.
-    // Spróbujmy z flexGrow i minWidth jako bazą:
-    minWidth: 200, // Minimalna szerokość, aby uniknąć zbyt wąskich kafelków
-    flexGrow: 1,   // Pozwala kafelkom rosnąć i wypełniać przestrzeń
-    flexBasis: `calc(50% - ${gapSize / 2}px)`, // Sugerowana baza dla 2 kolumn (działa głównie web)
-    // Alternatywnie, jeśli calc nie działa:
-    // flexBasis: tileWidthLarge, // Użyj obliczonej wartości, jeśli jest dostępna i poprawna dla RN
-    // Lub po prostu usuń width/flexBasis i polegaj na flexGrow/minWidth
-  },
-  kategoriaTileHover: { // Styl dla hover na kafelku (web)
-    ...shadows.medium, // Można też lekko zwiększyć cień
-  },
+    marginBottom: spacing.md, // For vertical spacing between rows
 
-  // Upewnij się, że styl dla małych urządzeń istnieje i działa jak oczekiwano
-  // kategoriaColumnMobile: {
-  //   width: '100%', // Na małych ekranach kafelek zajmuje całą szerokość
-  //   flexBasis: 'auto', // Resetuj flexBasis jeśli go używasz wyżej
-  // },
-
+    // --- Responsive properties ---
+    flexGrow: 1, // Allow tiles to grow to fill space in a row
+    flexShrink: 1, // Allow tiles to shrink if needed, but minWidth will protect content
+    flexBasis: '45%', // Suggests about 2 columns (e.g., 45% + 45% + gap fits)
+    // On wider screens, if minWidth allows, more could fit if basis was smaller e.g. '30%'
+    minWidth: 180,   // Minimum width for a tile to ensure content is readable
+    // Adjust this value based on your content and design preference
+  },
+  kategoriaTileHover: {
+    ...shadows.medium,
+  },
   kategoriaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-
   kategoriaTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flexShrink: 1,
     marginRight: spacing.sm,
   },
-
   kategoriaTitle: {
     fontSize: font.sizes.lg,
-    fontWeight: font.weights.semibold,
+    fontWeight: font.weights.bold,
     color: colors.primary,
-    marginRight: spacing.md, // Zwiększono odstęp z sm na md
+    marginRight: spacing.xs,
     flexShrink: 1,
   },
-
   wagiCounter: {
-    backgroundColor: colors.primary,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
-    minWidth: 18,
-    justifyContent: 'center',
+    backgroundColor: colors.primary, // ZMIANA: Tło na primary (niebieski)
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    minWidth: 36,
+    height: 28,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.primary, // ZMIANA: Ramka również na primary
+    marginLeft: spacing.xs,
   },
-
+  wagiCounterIcon: {
+    marginRight: spacing.xs,
+    fontSize: font.sizes.sm,
+    color: colors.textLight,
+  },
   wagiCounterText: {
     color: colors.textLight,
-    fontSize: font.sizes.xs,
-    fontWeight: font.weights.medium,
+    fontSize: font.sizes.sm,
+    fontWeight: font.weights.bold,
   },
-
   wagaDeleteBtn: {
     padding: spacing.xs,
-    transition: 'transform 0.1s ease-in-out', // Dodajemy płynne przejście dla web
+    transition: 'transform 0.1s ease-in-out',
   },
-  deleteBtnHover: { // Styl dla hover na przycisku usuwania (web)
-    transform: [{ scale: 1.2 }], // Lekkie powiększenie
+  deleteBtnHover: {
+    transform: [{ scale: 1.2 }],
   },
-
   wagiContainer: {
-    // Styl dla kontenera z listą wag
-    // Możesz dodać paddingTop jeśli chcesz większy odstęp od headera
-    // paddingTop: spacing.sm,
   },
-
   wagiRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap', // Pozwala kafelkom wag przechodzić do nowej linii
-    gap: spacing.sm, // Odstęp między kafelkami wag
+    flexWrap: 'wrap', // This already makes weight tiles responsive
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-
   wagaTile: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
     borderRadius: borderRadius.md,
     paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    // Usunięto marginBottom, bo gap w wagiRow załatwia odstępy
+    paddingHorizontal: spacing.md,
+    ...shadows.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    // Weight tiles will size based on content and wrap. Add minWidth if needed.
   },
-
   wagaText: {
     fontSize: font.sizes.sm,
-    color: colors.textSecondary,
-    marginRight: spacing.xs, // Odstęp od przycisku usuwania wagi
+    color: colors.info,
+    marginRight: spacing.xs,
+    fontWeight: font.weights.bold,
   },
-
   wagiEmpty: {
     fontSize: font.sizes.sm,
     color: colors.textSecondary,
@@ -198,49 +174,47 @@ export default StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-
-  deletingKategoria: { // Styl dla wizualnego feedbacku podczas usuwania
+  deletingKategoria: {
     opacity: 0.5,
-    // Możesz dodać np. zmianę tła
-    // backgroundColor: colors.error + '33', // Lekko czerwone tło
   },
-
-  // Style dla modali
   modalBg: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.65)', // Subtelnie ciemniejsze tło dla lepszego kontrastu
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.md,
   },
   modalCard: {
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+    borderRadius: borderRadius.xl, // Bardziej zaokrąglone rogi dla nowoczesnego wyglądu
+    padding: spacing.xl, // Zwiększony padding dla większej ilości "oddechu"
     width: '100%',
-    maxWidth: 450, // Maksymalna szerokość modala
+    maxWidth: 480, // Nieco szerszy modal, jeśli potrzeba
     ...shadows.large,
-    alignItems: 'center', // Wyśrodkowanie zawartości modala
+    alignItems: 'center',
+    borderWidth: Platform.OS === 'web' ? 1 : 0, // Subtelna ramka na webie
+    borderColor: Platform.OS === 'web' ? colors.border : 'transparent', // Kolor ramki
   },
   confirmModalCard: {
-    // Dodatkowe style dla modala potwierdzenia, jeśli potrzebne
+    // Można dodać specyficzne style dla modala potwierdzenia, jeśli potrzebne
   },
   modalIconHeader: {
-    marginBottom: spacing.md,
-    // Możesz dodać tło dla ikony
-    // backgroundColor: colors.accent + '20',
+    marginBottom: spacing.lg, // Większy odstęp pod ikoną
+    // Można dodać tło dla ikony, jeśli pasuje do designu:
+    // backgroundColor: colors.primary + '20', // Lekkie tło w kolorze primary
     // padding: spacing.sm,
     // borderRadius: borderRadius.full,
   },
   modalTitle: {
-    fontSize: font.sizes.xl,
+    fontSize: font.sizes.xl, // Rozmiar pozostaje, ale można zwiększyć do xxl
     fontWeight: font.weights.bold,
     color: colors.text,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xl, // Zwiększony odstęp pod tytułem
+    lineHeight: font.sizes.xl * 1.3, // Lepsza czytelność dla wieloliniowych tytułów
   },
   confirmTitle: {
-    marginBottom: spacing.lg, // Większy odstęp w modalu potwierdzenia
+    marginBottom: spacing.lg,
   },
   confirmSubtitle: {
     fontSize: font.sizes.sm,
@@ -251,93 +225,83 @@ export default StyleSheet.create({
   },
   modalBtns: {
     flexDirection: 'row',
-    justifyContent: 'space-around', // Lub 'flex-end'
-    marginTop: spacing.lg,
-    width: '100%', // Aby przyciski zajęły dostępną szerokość
+    justifyContent: 'space-evenly', // Lepsze rozłożenie przycisków
+    marginTop: spacing.xl, // Większy odstęp nad przyciskami
+    width: '100%',
   },
   modalBtn: {
-    ...componentStyles.button.base, // Użyj bazowych stylów z theme
-    flex: 1, // Aby przyciski równo się rozłożyły (jeśli chcesz)
-    marginHorizontal: spacing.sm, // Odstęp między przyciskami
-    maxWidth: 180, // Ogranicz maksymalną szerokość przycisku
-  },
-  btnText: { // Styl dla przycisków w modalach - już dziedziczy
-     ...componentStyles.button.text,
-  },
-  btnIcon: { // Upewnij się, że ten styl istnieje i jest poprawny
-     marginRight: spacing.xs,
+    ...componentStyles.button.base,
+    flex: 1,
+    marginHorizontal: spacing.sm,
+    maxWidth: 180, // Maksymalna szerokość przycisku
+    paddingVertical: spacing.md, // Większy padding dla przycisków
   },
   cancelBtn: {
-    backgroundColor: colors.textSecondary, // Szary dla anulowania
+    backgroundColor: colors.textSecondary,
   },
   confirmBtn: {
-    // backgroundColor: colors.primary, // Zmieniamy z primary
-    backgroundColor: colors.accent, // Używamy koloru akcentu
+    backgroundColor: colors.accent,
   },
   deleteBtn: {
-    backgroundColor: colors.error, // Czerwony dla usuwania (pozostaje bez zmian)
+    backgroundColor: colors.error,
   },
-  input: { // Upewnij się, że ten styl istnieje i jest poprawny
+  input: {
      ...componentStyles.input,
-     width: '100%', // Input na całą szerokość modala
+     width: '100%',
+     fontSize: font.sizes.md, // Nieco większa czcionka w polach input
+     paddingVertical: spacing.md, // Większy padding w inputach
+     marginBottom: spacing.lg, // Większy odstęp pod inputem
   },
-  // Style dla selectBox w modalu dodawania wagi
   selectBox: {
     width: '100%',
-    marginBottom: spacing.md,
-    // Usunięto borderWidth, borderColor, borderRadius, padding - przeniesione do selectItemsContainer
+    marginBottom: spacing.lg, // Zwiększony odstęp pod selectBox
   },
   selectLabel: {
-    fontSize: font.sizes.sm,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-    // Można dodać fontWeight: font.weights.medium
+    fontSize: font.sizes.md, // Nieco większa czcionka dla etykiety
+    color: colors.textSecondary, // Kolor pozostaje, ale można zmienić na colors.text
+    fontWeight: font.weights.medium, // Lekkie pogrubienie dla lepszej czytelności
+    marginBottom: spacing.md, // Większy odstęp pod etykietą
+    textAlign: 'left', // Wyrównanie do lewej dla standardowego wyglądu etykiet
+    width: '100%', // Aby textAlign działało poprawnie
   },
-  // Zmieniamy selectScroll na selectItemsContainer
-  selectItemsContainer: { // Nowy styl dla kontenera przycisków kategorii
-    flexDirection: 'row',   // Układ w rzędzie
-    flexWrap: 'wrap',       // Zawijanie elementów
-    gap: spacing.sm,        // Odstęp między przyciskami (poziomy i pionowy)
-    // Można dodać lekkie tło lub ramkę, jeśli chcesz wizualnie oddzielić ten obszar
-    // backgroundColor: colors.background,
-    // padding: spacing.sm,
-    // borderRadius: borderRadius.md,
-    // borderWidth: 1,
-    // borderColor: colors.border,
-    maxHeight: 150, // Ogranicz maksymalną wysokość, aby dodać przewijanie w razie potrzeby
-    overflow: 'hidden', // Ukryj nadmiarowe elementy, jeśli maxHeight jest ustawione
+  selectItemsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md, // Zwiększony odstęp między pigułkami
+    // maxHeight: 150, // Usunięte, ScrollView w komponencie kontroluje wysokość
+    // overflow: 'hidden', // Usunięte
   },
   selectItem: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.full, // Zaokrąglone rogi dla "pigułek"
+    paddingVertical: spacing.sm, // Większy padding dla pigułek
+    paddingHorizontal: spacing.lg, // Znacznie większy padding poziomy dla lepszego wyglądu
+    borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.background,
+    transition: 'transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
   },
   selectItemActive: {
-    // backgroundColor: colors.primary, // Zmieniamy z primary
-    // borderColor: colors.primary,   // Zmieniamy z primary
-    backgroundColor: colors.accent, // Używamy koloru akcentu
-    borderColor: colors.accent,   // Używamy koloru akcentu
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+    transform: [{ scale: 1.05 }], // Lekkie powiększenie dla aktywnej pigułki
   },
   selectItemText: {
     color: colors.text,
-    fontSize: font.sizes.sm,
+    fontSize: font.sizes.sm, // Rozmiar może pozostać, lub lekko zwięksony do md
+    fontWeight: font.weights.medium, // Pogrubienie dla lepszej czytelności
   },
   selectItemTextActive: {
-    color: colors.textLight, // Tekst pozostaje jasny na tle akcentu
-    fontWeight: font.weights.medium,
+    color: colors.textLight,
+    fontWeight: font.weights.bold, // Mocniejsze pogrubienie dla aktywnego tekstu
   },
   errorText: {
     color: colors.error,
     fontSize: font.sizes.sm,
     textAlign: 'center',
   },
-  // Style powiadomień
   notification: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? spacing.lg : 80, // Wyżej na mobilnych (np. przez pasek nawigacji)
+    bottom: Platform.OS === 'web' ? spacing.lg : 80,
     left: spacing.md,
     right: spacing.md,
     ...componentStyles.notification.base,
@@ -357,7 +321,13 @@ export default StyleSheet.create({
   },
   notifText: {
     ...componentStyles.notification.text,
-    flex: 1, // Aby tekst zajął resztę miejsca
-    textAlign: 'left', // Wyrównaj do lewej obok ikony
+    flex: 1,
+    textAlign: 'left',
+  },
+  btnText: { // Ten styl jest używany przez modalBtn
+    ...componentStyles.button.text,
+    color: colors.textLight, // Domyślny kolor tekstu na przyciskach
+    fontWeight: font.weights.semibold, // Pogrubienie tekstu na przyciskach
+    fontSize: font.sizes.md, // Nieco większa czcionka na przyciskach
   },
 });

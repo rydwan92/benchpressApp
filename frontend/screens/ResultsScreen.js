@@ -1,244 +1,306 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, Image, useWindowDimensions } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ScrollView, View, Text, Image, ActivityIndicator, TouchableOpacity, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useCompetitionStore } from '../store/useCompetitionStore';
-import NavBar from '../components/navigation/NavBar';
-import Footer from '../components/navigation/Footer';
-import { colors, font, spacing, borderRadius, shadows } from '../theme/theme';
-// import styles from '../styles/ResultsScreen.styles'; // Można przenieść style do osobnego pliku
+import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
-// --- Główny komponent ekranu ---
+import useCompetitionStore from '../store/useCompetitionStore';
+import { styles } from '../styles/ResultsStyles/ResultsScreen.styles';
+import { colors, spacing } from '../theme/theme';
+import NavBar from '../components/navigation/NavBar';
+import FooterComp from '../components/navigation/Footer';
+import OptionSelector from '../components/competition/OptionSelector';
+import IndividualResultsTable from '../components/results/IndividualResultsTable';
+import TeamResultsTable from '../components/results/TeamResultsTable';
+import { processAthletesForResults, sortIndividualResults, calculateTeamResults, generateCSV } from '../components/results/resultsHelper';
+
+// --- POCZĄTEK ZMIANY: Definicja stałych dla "Wszystkich" opcji ---
+const ALL_CATEGORIES_VALUE = "__ALL_CATEGORIES__";
+const ALL_WEIGHTS_VALUE = "__ALL_WEIGHTS__";
+// --- KONIEC ZMIANY ---
 
 export default function ResultsScreen() {
   const navigation = useNavigation();
   const zawody = useCompetitionStore(state => state.zawody);
-  const zawodnicy = useCompetitionStore(state => state.zawodnicy);
-  const kategorie = useCompetitionStore(state => state.kategorie);
+  const kategorieStore = useCompetitionStore(state => state.kategorie);
+  const zawodnicyStore = useCompetitionStore(state => state.zawodnicy);
 
-  const { width } = useWindowDimensions();
-
-  // Stany dla wymiarów avatarów z nagłówka (skopiowane z RegistrationScreen/CompetitionScreen)
   const [headerKlubAvatarDimensions, setHeaderKlubAvatarDimensions] = useState(null);
-  const [headerJudgeAvatarDimensions, setHeaderJudgeAvatarDimensions] = useState({ width: 32, height: 32 });
+  const [headerJudgeAvatarDimensions, setHeaderJudgeAvatarDimensions] = useState(null);
 
-  // Efekty do ładowania wymiarów avatarów (skopiowane z RegistrationScreen/CompetitionScreen)
+  const [viewMode, setViewMode] = useState('individual'); // 'individual', 'team'
+  // --- POCZĄTEK ZMIANY: Inicjalizacja stanu nowymi stałymi ---
+  const [selectedCategory, setSelectedCategory] = useState(ALL_CATEGORIES_VALUE);
+  const [selectedWeight, setSelectedWeight] = useState(ALL_WEIGHTS_VALUE);
+  // --- KONIEC ZMIANY ---
+  const [isLoading, setIsLoading] = useState(false);
+
   useEffect(() => {
     if (zawody.klubAvatar) {
       Image.getSize(zawody.klubAvatar, (imgWidth, imgHeight) => {
         const aspectRatio = imgWidth / imgHeight;
-        const maxWidth = 60;
-        const maxHeight = 40;
-        let displayWidth = imgWidth;
-        let displayHeight = imgHeight;
-        if (displayWidth > maxWidth) {
-          displayWidth = maxWidth;
-          displayHeight = displayWidth / aspectRatio;
-        }
-        if (displayHeight > maxHeight) {
-          displayHeight = maxHeight;
-          displayWidth = displayHeight * aspectRatio;
-        }
-        setHeaderKlubAvatarDimensions({ width: displayWidth, height: displayHeight });
-      }, (error) => {
-        console.error('Błąd pobierania rozmiaru obrazu dla nagłówka:', error);
-        setHeaderKlubAvatarDimensions(null);
-      });
-    } else {
-      setHeaderKlubAvatarDimensions(null);
-    }
+        const displayHeight = Platform.OS === 'web' ? 50 : 40;
+        setHeaderKlubAvatarDimensions({ width: displayHeight * aspectRatio, height: displayHeight });
+      }, () => setHeaderKlubAvatarDimensions(null));
+    } else setHeaderKlubAvatarDimensions(null);
   }, [zawody.klubAvatar]);
 
   useEffect(() => {
     if (zawody.sedzia?.avatar) {
       Image.getSize(zawody.sedzia.avatar, (imgWidth, imgHeight) => {
-        const size = Math.min(imgWidth, imgHeight);
-        const maxSize = 32;
-        const displaySize = Math.min(size, maxSize);
-        setHeaderJudgeAvatarDimensions({ width: displaySize, height: displaySize });
-      }, (error) => {
-        console.error('Błąd pobierania rozmiaru avatara sędziego:', error);
-        setHeaderJudgeAvatarDimensions({ width: 32, height: 32 });
-      });
-    } else {
-      setHeaderJudgeAvatarDimensions({ width: 32, height: 32 });
-    }
+        const aspectRatio = imgWidth / imgHeight;
+        const displayHeight = Platform.OS === 'web' ? 40 : 32;
+        setHeaderJudgeAvatarDimensions({ width: displayHeight * aspectRatio, height: displayHeight });
+      }, () => setHeaderJudgeAvatarDimensions(null));
+    } else setHeaderJudgeAvatarDimensions(null);
   }, [zawody.sedzia?.avatar]);
 
-  // Tutaj w przyszłości będzie logika obliczania wyników i sortowania
+  // --- POCZĄTEK ZMIANY: Reset selectedWeight gdy selectedCategory się zmienia ---
+  useEffect(() => {
+    setSelectedWeight(ALL_WEIGHTS_VALUE);
+  }, [selectedCategory]);
+  // --- KONIEC ZMIANY ---
+
+  const processedAthletes = useMemo(() => {
+    if (typeof processAthletesForResults !== 'function') {
+      console.error('processAthletesForResults is NOT a function!');
+      return [];
+    }
+    setIsLoading(true);
+    const result = processAthletesForResults(zawodnicyStore);
+    setIsLoading(false);
+    return result;
+  }, [zawodnicyStore]);
+
+  const kategorieOptions = useMemo(() => [
+    // --- POCZĄTEK ZMIANY: Użycie stałej dla "Wszystkich Kategorii" ---
+    { label: 'Wszystkie Kategorie', value: ALL_CATEGORIES_VALUE },
+    // --- KONIEC ZMIANY ---
+    ...kategorieStore.map(k => ({ label: k.nazwa, value: k.nazwa }))
+  ], [kategorieStore]);
+
+  const weightOptions = useMemo(() => {
+    // --- POCZĄTEK ZMIANY: Użycie stałej i dostosowanie logiki ---
+    const baseOptions = [{ label: 'Wszystkie Wagi', value: ALL_WEIGHTS_VALUE }];
+    if (selectedCategory === ALL_CATEGORIES_VALUE) {
+      return baseOptions;
+    }
+    // --- KONIEC ZMIANY ---
+    const categoryObj = kategorieStore.find(k => k.nazwa === selectedCategory);
+    if (!categoryObj || !categoryObj.wagi || categoryObj.wagi.length === 0) return baseOptions;
+    return [
+      ...baseOptions,
+      ...categoryObj.wagi.map(w => ({ label: String(w), value: String(w) }))
+    ];
+  }, [kategorieStore, selectedCategory]);
+
+  const individualResultsData = useMemo(() => {
+    if (viewMode !== 'individual') return [];
+    if (typeof sortIndividualResults !== 'function') {
+        console.error('sortIndividualResults is NOT a function!');
+        return [];
+    }
+    setIsLoading(true);
+    let filtered = processedAthletes;
+    // --- POCZĄTEK ZMIANY: Dostosowanie logiki filtrowania ---
+    if (selectedCategory && selectedCategory !== ALL_CATEGORIES_VALUE) {
+      filtered = filtered.filter(a => a.kategoria === selectedCategory);
+    }
+    if (selectedWeight && selectedWeight !== ALL_WEIGHTS_VALUE) {
+      filtered = filtered.filter(a => String(a.waga) === String(selectedWeight));
+    }
+    // --- KONIEC ZMIANY ---
+    const sorted = sortIndividualResults(filtered).map((a, index) => ({ ...a, rank: index + 1 }));
+    setIsLoading(false);
+    return sorted;
+  }, [processedAthletes, viewMode, selectedCategory, selectedWeight]);
+
+  const teamResultsData = useMemo(() => {
+    if (viewMode !== 'team') return [];
+    if (typeof calculateTeamResults !== 'function') {
+        console.error('calculateTeamResults is NOT a function!');
+        return [];
+    }
+    setIsLoading(true);
+    const teams = calculateTeamResults(processedAthletes);
+    setIsLoading(false);
+    return teams;
+  }, [processedAthletes, viewMode]);
+
+  const viewModeOptions = [
+    { label: 'Indywidualnie', value: 'individual' },
+    { label: 'Klubowe', value: 'team' },
+  ];
+
+  const handleExport = async () => {
+    let dataToExport;
+    let columns;
+    let fileName = `wyniki_${zawody.nazwa?.replace(/\s+/g, '_') || 'zawodow'}`;
+
+    if (viewMode === 'individual') {
+      dataToExport = individualResultsData;
+      fileName += `_indywidualne`;
+      if (selectedCategory && selectedCategory !== ALL_CATEGORIES_VALUE) fileName += `_${selectedCategory.replace(/\s+/g, '_')}`;
+      if (selectedWeight && selectedWeight !== ALL_WEIGHTS_VALUE) fileName += `_waga_${selectedWeight}`;
+      columns = [
+        { label: 'Rank', accessor: row => row.rank },
+        { label: 'Imię', accessor: row => row.imie },
+        { label: 'Nazwisko', accessor: row => row.nazwisko },
+        { label: 'Klub', accessor: row => row.klub },
+        { label: 'Płeć', accessor: row => row.plec },
+        { label: 'Kat.', accessor: row => row.kategoria },
+        { label: 'Waga', accessor: row => row.waga },
+        { label: 'Waga Ciała', accessor: row => row.bodyWeightParsed?.toFixed(2) },
+        { label: 'P1', accessor: row => `${row.podejscie1 || '-'} (${row.podejscie1Status || 'N'})` },
+        { label: 'P2', accessor: row => `${row.podejscie2 || '-'} (${row.podejscie2Status || 'N'})` },
+        { label: 'P3', accessor: row => `${row.podejscie3 || '-'} (${row.podejscie3Status || 'N'})` },
+        { label: 'Best Lift', accessor: row => row.bestLift?.toFixed(2) },
+        { label: 'IPF GL Pts', accessor: row => row.ipfPoints?.toFixed(2) },
+      ];
+    } else { // team
+      dataToExport = teamResultsData;
+      fileName += `_klubowe`;
+      columns = [
+        { label: 'Rank', accessor: row => row.rank },
+        { label: 'Klub', accessor: row => row.clubName },
+        { label: 'Total IPF GL Pts', accessor: row => row.totalIPFPoints?.toFixed(2) },
+        { label: 'Liczba Zaw. w Klubie', accessor: row => row.allAthletesInClubCount },
+      ];
+    }
+    fileName += '.csv';
+
+    if (dataToExport.length === 0) {
+      Alert.alert("Eksport", "Brak danych do wyeksportowania dla wybranych filtrów.");
+      return;
+    }
+
+    if (typeof generateCSV !== 'function') {
+        console.error('generateCSV is NOT a function!');
+        Alert.alert("Błąd", "Funkcja eksportu jest niedostępna.");
+        return;
+    }
+    const csvString = generateCSV(dataToExport, columns);
+
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } else { // Mobile
+      try {
+        const path = FileSystem.documentDirectory + fileName;
+        await FileSystem.writeAsStringAsync(path, csvString, { encoding: FileSystem.EncodingType.UTF8 });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(path, { mimeType: 'text/csv', dialogTitle: 'Udostępnij wyniki CSV' });
+        } else {
+          Alert.alert("Błąd", "Udostępnianie nie jest dostępne na tym urządzeniu.");
+        }
+      } catch (error) {
+        console.error("Błąd eksportu CSV na mobile:", error);
+        Alert.alert("Błąd Eksportu", "Nie udało się zapisać lub udostępnić pliku CSV.");
+      }
+    }
+  };
+
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Nagłówek skopiowany z innych ekranów */}
       <LinearGradient
         colors={[colors.gradient.start, colors.gradient.end]}
         style={styles.headerBackground}
       >
         <View style={styles.headerBar}>
-          <View style={styles.headerSideContainer}>
-            {zawody.klubAvatar && headerKlubAvatarDimensions ? (
-              <Image
-                source={{ uri: zawody.klubAvatar }}
-                style={[styles.headerClubLogo, headerKlubAvatarDimensions]}
-              />
-            ) : null}
+          <View style={[styles.headerSideContainer, styles.headerLeftAlign]}>
+            {headerKlubAvatarDimensions && zawody.klubAvatar ? (
+              <Image source={{ uri: zawody.klubAvatar }} style={[styles.headerClubLogo, headerKlubAvatarDimensions]} resizeMode="contain" />
+            ) : <View style={styles.headerAvatarPlaceholder} />}
             <View style={styles.headerLocationDate}>
-              <Text style={styles.headerLocationText}>{zawody.miejsce}</Text>
-              <Text style={styles.headerDateText}>{zawody.data}</Text>
+              <Text style={styles.headerLocationText} numberOfLines={1}>{zawody.miejsce || 'Lokalizacja'}</Text>
+              <Text style={styles.headerDateText}>{zawody.data || 'Data'}</Text>
             </View>
           </View>
-          <Text style={styles.headerLogo}>{zawody.nazwa || 'Benchpress Cup'}</Text>
+          <Text style={styles.headerLogo} numberOfLines={1}>{zawody.nazwa || 'Nazwa Zawodów'}</Text>
           <View style={[styles.headerSideContainer, styles.headerRightAlign]}>
             <View style={styles.headerJudgeInfo}>
-              <Text style={styles.headerJudgeName}>{`${zawody.sedzia?.imie || ''} ${zawody.sedzia?.nazwisko || ''}`}</Text>
+              <Text style={styles.headerJudgeName} numberOfLines={1}>{`${zawody.sedzia?.imie || ''} ${zawody.sedzia?.nazwisko || 'Sędzia'}`.trim()}</Text>
             </View>
-            {zawody.sedzia?.avatar ? (
-              <Image
-                source={{ uri: zawody.sedzia.avatar }}
-                style={[styles.headerJudgeAvatar, headerJudgeAvatarDimensions]}
-              />
-            ) : null}
+            {headerJudgeAvatarDimensions && zawody.sedzia?.avatar ? (
+              <Image source={{ uri: zawody.sedzia.avatar }} style={[styles.headerJudgeAvatar, headerJudgeAvatarDimensions]} resizeMode="contain" />
+            ) : <View style={styles.headerAvatarPlaceholder} />}
           </View>
         </View>
         <NavBar navigation={navigation} />
       </LinearGradient>
 
-      {/* Główna zawartość ekranu */}
       <View style={styles.mainContent}>
-        <Text style={styles.mainTitle}>Wyniki zawodów</Text>
+        <Text style={styles.screenTitle}>Wyniki Końcowe</Text>
 
-        {/* Placeholder dla tabeli/listy wyników */}
-        <View style={styles.resultsPlaceholder}>
-          <Text style={styles.placeholderText}>Tutaj pojawi się tabela wyników...</Text>
-          {/* Można dodać bardziej szczegółowy placeholder, np. nagłówki tabeli */}
-          <View style={styles.tableHeaderPlaceholder}>
-            <Text style={styles.tableHeaderText}>Miejsce</Text>
-            <Text style={styles.tableHeaderText}>Zawodnik</Text>
-            <Text style={styles.tableHeaderText}>Klub</Text>
-            <Text style={styles.tableHeaderText}>Kat.</Text>
-            <Text style={styles.tableHeaderText}>Waga</Text>
-            <Text style={styles.tableHeaderText}>Wynik</Text>
-            <Text style={styles.tableHeaderText}>Pkt.</Text>
+        <View style={styles.filtersContainer}>
+          <View style={styles.filterGroup}>
+            <OptionSelector
+              label="Tryb Widoku"
+              options={viewModeOptions}
+              selectedValue={viewMode}
+              onSelect={setViewMode}
+            />
           </View>
+          {viewMode === 'individual' && (
+            <>
+              <View style={styles.filterGroup}>
+                <OptionSelector
+                  label="Kategoria"
+                  options={kategorieOptions}
+                  selectedValue={selectedCategory}
+                  onSelect={setSelectedCategory}
+                />
+              </View>
+              <View style={styles.filterGroup}>
+                <OptionSelector
+                  label="Klasa Wagowa"
+                  options={weightOptions}
+                  selectedValue={selectedWeight}
+                  onSelect={setSelectedWeight}
+                  // --- POCZĄTEK ZMIANY: Uproszczenie logiki disabled ---
+                  // Jeśli wybrano "Wszystkie Kategorie", selektor wagi jest nieaktywny (bo i tak będzie "Wszystkie Wagi")
+                  // lub jeśli nie ma kategorii w ogóle.
+                  disabled={selectedCategory === ALL_CATEGORIES_VALUE || kategorieStore.length === 0}
+                  // --- KONIEC ZMIANY ---
+                />
+              </View>
+            </>
+          )}
         </View>
-      </View>
 
-      <Footer />
+        {isLoading && <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.xl }} />}
+
+        {!isLoading && viewMode === 'individual' && (
+          <IndividualResultsTable data={individualResultsData} />
+        )}
+        {!isLoading && viewMode === 'team' && (
+          <TeamResultsTable data={teamResultsData} />
+        )}
+
+        {!isLoading && (individualResultsData.length > 0 || teamResultsData.length > 0) && (
+            <TouchableOpacity style={styles.exportButton} onPress={handleExport}>
+                <MaterialCommunityIcons name="table-arrow-right" size={20} color={colors.textLight} style={{ marginRight: spacing.sm }} />
+                <Text style={styles.exportButtonText}>Eksportuj do CSV</Text>
+            </TouchableOpacity>
+        )}
+
+      </View>
+      <FooterComp
+        competitionLocation={zawody.miejsce}
+        registeredAthletesCount={zawodnicyStore.length}
+      />
     </ScrollView>
   );
 }
-
-// --- Style ---
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  contentContainer: {
-    flexGrow: 1,
-  },
-  // Style nagłówka (takie same jak w CompetitionScreen)
-  headerBackground: {
-    paddingTop: spacing.xl,
-    ...shadows.medium,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center', // Dodano dla pewności
-    paddingHorizontal: '5%',
-    width: '100%',
-    marginBottom: spacing.lg, // Zmieniono na lg dla spójności
-  },
-  headerSideContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    minWidth: 100, // Dodano dla spójności
-  },
-  headerRightAlign: {
-    justifyContent: 'flex-end',
-  },
-  headerClubLogo: {
-    marginRight: spacing.sm,
-    borderRadius: borderRadius.sm,
-  },
-  headerLocationDate: {},
-  headerLocationText: {
-    fontSize: font.sizes.xs,
-    color: colors.textLight,
-    fontWeight: font.weights.medium,
-  },
-  headerDateText: {
-    fontSize: font.sizes.xs,
-    color: colors.textLight + 'aa',
-  },
-  headerLogo: {
-    fontSize: font.sizes['3xl'],
-    fontWeight: font.weights.bold, // Upewniono się, że jest bold
-    color: colors.textMainTitle, // Zmieniono na textMainTitle dla spójności
-    fontFamily: font.family,
-    letterSpacing: 1,
-    textAlign: 'center',
-    // Usunięto flex: 2
-    marginHorizontal: spacing.md, // Zmieniono na md dla spójności
-  },
-  headerJudgeInfo: {
-    alignItems: 'flex-end',
-    marginRight: spacing.sm,
-  },
-  headerJudgeName: {
-    fontSize: font.sizes.xs,
-    color: colors.textLight,
-    fontWeight: font.weights.medium,
-  },
-  headerJudgeAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: borderRadius.full,
-    resizeMode: 'cover',
-  },
-  // Główna zawartość
-  mainContent: {
-    flex: 1,
-    padding: spacing.lg,
-  },
-  mainTitle: {
-    fontSize: font.sizes['2xl'],
-    fontWeight: font.weights.bold,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.lg,
-  },
-  // Placeholder dla wyników
-  resultsPlaceholder: {
-    flex: 1, // Aby zajął dostępną przestrzeń
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    backgroundColor: colors.surface,
-    alignItems: 'center', // Wyśrodkowanie tekstu placeholdera
-    justifyContent: 'flex-start', // Placeholder na górze
-  },
-  placeholderText: {
-    fontSize: font.sizes.lg,
-    color: colors.textSecondary,
-    marginBottom: spacing.lg,
-  },
-  tableHeaderPlaceholder: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  tableHeaderText: {
-    fontSize: font.sizes.sm,
-    color: colors.textSecondary,
-    fontWeight: font.weights.medium,
-    flex: 1, // Rozciągnij kolumny równomiernie (do dostosowania)
-    textAlign: 'center',
-  }
-});
