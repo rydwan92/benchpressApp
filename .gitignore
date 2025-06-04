@@ -1,0 +1,64 @@
+# Zależności Node.js
+node_modules/
+
+# Pliki środowiskowe
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.development.example
+
+# Logi
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Pliki tymczasowe edytorów i IDE
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+*.sublime-project
+.vscode/ # Z wyjątkiem plików, które chcesz wersjonować (np. settings.json, extensions.json)
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Pliki systemowe macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Pliki tymczasowe Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Pliki generowane przez narzędzia do budowania/kompilacji (jeśli używasz np. TypeScriptu w backendzie)
+# dist/
+# build/
+# out/
+# lib/
+
+# Dane aplikacji (jeśli nie powinny być wersjonowane)
+# Jeśli appData.json zawiera dane startowe/konfiguracyjne, które CHCESZ wersjonować,
+# usuń lub zakomentuj poniższą linię.
+# Jeśli zawiera dane generowane dynamicznie lub wrażliwe, powinna być ignorowana.
+# appData.json
+
+# Pliki cache
+.npm/
+.yarn-cache/
+.pnpm-store/
+
+# Pliki związane z testami (np. raporty pokrycia)
+coverage/
+.nyc_output/

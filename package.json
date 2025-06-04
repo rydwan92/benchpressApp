@@ -1,0 +1,17 @@
+{
+  "name": "benchpress-competition-app",
+  "version": "1.0.0",
+  "description": "Apliakcja do zarządzania zawodami w wyciskaniu sztangi leżąc",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:frontend": "npm start --prefix frontend",
+    "start:backend": "npm start --prefix backend",
+    "dev": "concurrently \"npm:start:frontend\" \"npm:start:backend\""
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
