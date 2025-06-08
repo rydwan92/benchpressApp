@@ -1,7 +1,12 @@
-const BACKEND_PORT = 5001;
-const LOCAL_IP = '192.168.0.244';
-
 export const CONFIG = {
-  BACKEND_ADDRESS: `http://${LOCAL_IP}:${BACKEND_PORT}`,
-  SOCKET_URL: `ws://${LOCAL_IP}:${BACKEND_PORT}` // To jest nieużywane przez Socket.IO client v3+
+  BACKEND_ADDRESS: process.env.RENDER_EXTERNAL_URL || 'http://localhost:5001',
+  SOCKET_URL: (process.env.RENDER_EXTERNAL_URL || 'ws://localhost:5001').replace(/^http/, 'ws')
 };
+
+
+/** 
+ *export const CONFIG = {
+  BACKEND_ADDRESS: process.env.RENDER_EXTERNAL_URL || 'http://localhost:5001',
+  SOCKET_URL: (process.env.RENDER_EXTERNAL_URL || 'ws://localhost:5001').replace(/^http/, 'ws')
+};
+*/
